@@ -10,6 +10,7 @@ import {
     Quantum,
     Gravity,
     Channels,
+    ColorSpace,
 } from "@imagemagick/magick-wasm";
 
 // Shadcn-Vue Components
@@ -81,6 +82,8 @@ const extentW = ref(0);
 const extentH = ref(0);
 const extentGravity = ref('Center');
 const extentBgColor = ref('#ffffff');
+const deskewThreshold = ref([0]);
+const deskewAutoCrop = ref(true);
 
 // Color Adjust
 const brightness = ref([100]);
@@ -108,6 +111,16 @@ const cannyEdgeLower = ref([10]);
 const cannyEdgeUpper = ref([30]);
 const oilpaintRadius = ref([0]);
 const solarizeFactor = ref([50]);
+const bilateralWidth = ref([0]);
+const bilateralHeight = ref([0]);
+const bilateralIntensitySigma = ref([1.5]);
+const bilateralSpatialSigma = ref([1]);
+const sigmoidalContrast = ref([0]);
+const sigmoidalMidpoint = ref([50]);
+const sigmoidalChannels = ref('All');
+
+// Color Adjust
+const colorSpace = ref('RGB');
 
 
 // --- Lifecycle Hooks ---
@@ -266,6 +279,10 @@ function processImage() {
                     image.extent(extentW.value, extentH.value, Gravity[extentGravity.value]);
                     appliedOptions.extent = { width: extentW.value, height: extentH.value, gravity: extentGravity.value, backgroundColor: extentBgColor.value };
                 }
+                if (deskewThreshold.value[0] > 0) {
+                    const angle = image.deskew(new Percentage(deskewThreshold.value[0]), deskewAutoCrop.value);
+                    appliedOptions.deskew = { angle, threshold: deskewThreshold.value[0], autoCrop: deskewAutoCrop.value };
+                }
 
                 // Color
                 if (brightness.value[0] !== 100 || saturation.value[0] !== 100 || hue.value[0] !== 100) {
@@ -297,6 +314,17 @@ function processImage() {
                     const selectedThresholdChannels = thresholdChannels.value === 'All' ? Channels.All : Channels[thresholdChannels.value];
                     image.threshold(new Percentage(thresholdPercentage.value[0]), selectedThresholdChannels);
                     appliedOptions.threshold = { percentage: thresholdPercentage.value[0], channels: thresholdChannels.value };
+                }
+
+                if (sigmoidalContrast.value[0] !== 0) {
+                    const sigmoidalChannelsSelected = sigmoidalChannels.value === 'All' ? Channels.All : Channels[sigmoidalChannels.value];
+                    image.sigmoidalContrast(sigmoidalContrast.value[0], new Percentage(sigmoidalMidpoint.value[0]), sigmoidalChannelsSelected);
+                    appliedOptions.sigmoidalContrast = { contrast: sigmoidalContrast.value[0], midpoint: sigmoidalMidpoint.value[0], channels: sigmoidalChannels.value };
+                }
+
+                if (colorSpace.value !== 'RGB') {
+                    image.colorSpace = ColorSpace[colorSpace.value];
+                    appliedOptions.colorSpace = colorSpace.value;
                 }
 
                 // Filters
@@ -334,6 +362,10 @@ function processImage() {
                         case "solarize":
                             image.solarize(new Percentage(solarizeFactor.value[0]));
                             appliedOptions.solarizeFactor = solarizeFactor.value[0];
+                            break;
+                        case "bilateralBlur":
+                            image.bilateralBlur(bilateralWidth.value[0], bilateralHeight.value[0], bilateralIntensitySigma.value[0], bilateralSpatialSigma.value[0]);
+                            appliedOptions.bilateralBlur = { width: bilateralWidth.value[0], height: bilateralHeight.value[0], intensitySigma: bilateralIntensitySigma.value[0], spatialSigma: bilateralSpatialSigma.value[0] };
                             break;
                     }
                 }
@@ -414,12 +446,15 @@ function resetSettings() {
     extentH.value = 0;
     extentGravity.value = 'Center';
     extentBgColor.value = '#ffffff';
+    deskewThreshold.value = [0];
+    deskewAutoCrop.value = true;
 
     // Color Adjust
     brightness.value = [100];
     saturation.value = [100];
     hue.value = [100];
     contrast.value = [0];
+    colorSpace.value = 'RGB';
     normalizeImage.value = false;
     autoLevel.value = false;
     autoOrient.value = false;
@@ -429,6 +464,9 @@ function resetSettings() {
     levelChannels.value = 'All';
     thresholdPercentage.value = [50];
     thresholdChannels.value = 'All';
+    sigmoidalContrast.value = [0];
+    sigmoidalMidpoint.value = [50];
+    sigmoidalChannels.value = 'All';
 
     // Filters & Effects
     effect.value = 'none';
@@ -441,6 +479,10 @@ function resetSettings() {
     cannyEdgeUpper.value = [30];
     oilpaintRadius.value = [0];
     solarizeFactor.value = [50];
+    bilateralWidth.value = [0];
+    bilateralHeight.value = [0];
+    bilateralIntensitySigma.value = [1.5];
+    bilateralSpatialSigma.value = [1];
 }
 
 // Zoom and Pan Handlers
@@ -664,6 +706,27 @@ async function handleDrop(e) {
                 <Label class="text-sm text-muted-foreground">Extent Background Color</Label>
                 <Input type="color" v-model="extentBgColor" class="h-10 w-full" />
               </div>
+
+              <div class="field">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                        Deskew Threshold
+                        <span class="text-xs font-medium text-primary">{{ deskewThreshold[0] }}</span>
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Removes skew from an image, common in scanned documents. Returns the detected skew angle.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <Slider v-model="deskewThreshold" :max="100" :min="0" :step="1" />
+              </div>
+              <div class="flex items-center space-x-2">
+                <Switch id="deskewAutoCrop" v-model="deskewAutoCrop" />
+                <Label for="deskewAutoCrop" class="text-sm text-muted-foreground">Deskew Auto Crop</Label>
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -698,7 +761,24 @@ async function handleDrop(e) {
                 </Label>
                 <Slider v-model="contrast" :min="-100" :max="100" />
               </div>
-              
+              <div class="field">
+                <Label class="text-sm text-muted-foreground">Color Space</Label>
+                <Select v-model="colorSpace">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Select color space" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="RGB">RGB</SelectItem>
+                    <SelectItem value="Gray">Gray</SelectItem>
+                    <SelectItem value="CMYK">CMYK</SelectItem>
+                    <SelectItem value="HSL">HSL</SelectItem>
+                    <SelectItem value="HSV">HSV</SelectItem>
+                    <SelectItem value="HWB">HWB</SelectItem>
+                    <SelectItem value="LAB">LAB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <hr class="my-4 border-border">
               
               <div class="flex flex-col gap-2 mb-2">
@@ -812,6 +892,45 @@ async function handleDrop(e) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div class="field">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                        Sigmoidal Contrast
+                        <span class="text-xs font-medium text-primary">{{ sigmoidalContrast[0] }}</span>
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Adjust the image contrast with a non-linear sigmoidal contrast algorithm, which often produces more photorealistic results than a linear contrast adjustment.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <Slider v-model="sigmoidalContrast" :max="20" :min="-20" :step="1" />
+              </div>
+              <div class="field">
+                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
+                  Sigmoidal Midpoint
+                  <span class="text-xs font-medium text-primary">{{ sigmoidalMidpoint[0] }}</span>
+                </Label>
+                <Slider v-model="sigmoidalMidpoint" :max="100" :min="0" :step="1" />
+              </div>
+              <div class="field">
+                <Label class="text-sm text-muted-foreground">Sigmoidal Channels</Label>
+                <Select v-model="sigmoidalChannels">
+                  <SelectTrigger class="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All</SelectItem>
+                    <SelectItem value="Red">Red</SelectItem>
+                    <SelectItem value="Green">Green</SelectItem>
+                    <SelectItem value="Blue">Blue</SelectItem>
+                    <SelectItem value="Alpha">Alpha</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -833,6 +952,7 @@ async function handleDrop(e) {
                     <SelectItem value="cannyEdge">Edge Detect</SelectItem>
                     <SelectItem value="oilpaint">Oil Paint</SelectItem>
                     <SelectItem value="solarize">Solarize</SelectItem>
+                    <SelectItem value="bilateralBlur">Bilateral Blur</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -878,6 +998,72 @@ async function handleDrop(e) {
                     <span class="text-xs font-medium text-primary">{{ cannyEdgeUpper[0] }}%</span>
                   </Label>
                   <Slider v-model="cannyEdgeUpper" />
+                </div>
+              </div>
+              <div v-if="effect === 'bilateralBlur'" class="gap-2">
+                <div class="field">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                          Bilateral Width
+                          <span class="text-xs font-medium text-primary">{{ bilateralWidth[0] }}</span>
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Width of the neighborhood in pixels for bilateral blur (edge-preserving smoothing).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Slider v-model="bilateralWidth" :max="10" :min="0" :step="1" />
+                </div>
+                <div class="field">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                          Bilateral Height
+                          <span class="text-xs font-medium text-primary">{{ bilateralHeight[0] }}</span>
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Height of the neighborhood in pixels for bilateral blur (edge-preserving smoothing).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Slider v-model="bilateralHeight" :max="10" :min="0" :step="1" />
+                </div>
+                <div class="field">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                          Bilateral Intensity Sigma
+                          <span class="text-xs font-medium text-primary">{{ bilateralIntensitySigma[0] }}</span>
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Sigma in the intensity space for bilateral blur (controls how edges are preserved).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Slider v-model="bilateralIntensitySigma" :max="5" :min="0.1" :step="0.1" />
+                </div>
+                <div class="field">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
+                          Bilateral Spatial Sigma
+                          <span class="text-xs font-medium text-primary">{{ bilateralSpatialSigma[0] }}</span>
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Sigma in the coordinate space for bilateral blur (controls smoothing extent).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Slider v-model="bilateralSpatialSigma" :max="5" :min="0.1" :step="0.1" />
                 </div>
               </div>
               <div class="field">

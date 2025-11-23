@@ -1,4 +1,5 @@
-- [x] Dark Mode
+- [x] Dark mode
 - [ ] Process multiple images
 - [x] Make sure console log says new size, dimensions, etc.
 - [ ] Add more settings
+- [ ] Test colour spaces
