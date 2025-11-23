@@ -29,6 +29,7 @@ WASMagick is a client-side image converter, using magick-wasm.
 *   **Saturation**: Adjust the color intensity of the image (0% to 300%).
 *   **Hue**: Shift the colors of the image (0% to 200%).
 *   **Contrast**: Increase or decrease the difference between light and dark areas (-100 to 100).
+*   **Color Space Transformation**: Convert the image to different color spaces (RGB, Gray, CMYK, HSL, HSV, HWB, LAB).
 *   **Normalize**: Automatically enhances contrast by stretching the range of intensity values.
 *   **Auto Level**: Automatically adjusts image levels by scaling the minimum and maximum values to the full range.
 *   **Auto Orient**: Automatically adjusts the image orientation based on its EXIF metadata.
@@ -45,3 +46,4 @@ WASMagick is a client-side image converter, using magick-wasm.
 *   **Edge Detect (Canny)**: Detect edges in the image using the Canny algorithm, with configurable strength, lower, and upper thresholds.
 *   **Oil Paint**: Simulate an oil painting effect with a configurable brush radius.
 *   **Solarize**: Create a photographic effect by inverting pixels that are brighter than a configurable threshold.
+*   **Bilateral Blur**: Apply edge-preserving smoothing blur with configurable width, height, intensity sigma, and spatial sigma parameters.
