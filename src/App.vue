@@ -62,6 +62,7 @@ let initialImageY = 0;
 
 // Template Refs
 const previewImageRef = ref(null);
+const viewportRef = ref(null);
 
 // --- Form Controls State ---
 
@@ -158,9 +159,15 @@ onMounted(async () => {
 // --- Computed Properties ---
 
 const imageStyle = computed(() => ({
-    transform: `scale(${currentZoom.value / 100}) translate(${imageX.value}px, ${imageY.value}px)`,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    // Center anchor (-50%) + Pan Offset (imageX) + Scale
+    transform: `translate(calc(-50% + ${imageX.value}px), calc(-50% + ${imageY.value}px)) scale(${currentZoom.value / 100})`,
     display: showPlaceholder.value ? 'none' : 'block',
     cursor: isPanning.value ? 'grabbing' : 'grab',
+    // Hide image until calculated to prevent flash of huge content
+    opacity: (processedImageUrl.value || originalImageUrl.value) ? 1 : 0
 }));
 
 const displayedImage = computed(() => {
@@ -486,14 +493,47 @@ function resetSettings() {
 }
 
 // Zoom and Pan Handlers
-function resetView() { currentZoom.value = 100; imageX.value = 0; imageY.value = 0; }
-function zoomIn() { currentZoom.value += zoomStep; }
-function zoomOut() { currentZoom.value = Math.max(10, currentZoom.value - zoomStep); }
+function setZoom(newZoom) {
+    const roundedZoom = Math.floor(newZoom / 10) * 10;
+    currentZoom.value = Math.max(10, roundedZoom);
+}
+
+function fitImageToScreen() {
+    if (!previewImageRef.value || !viewportRef.value) return;
+    
+    const img = previewImageRef.value;
+    const container = viewportRef.value;
+    
+    // Reset panning
+    imageX.value = 0;
+    imageY.value = 0;
+
+    if (!img.naturalWidth || !img.naturalHeight) return;
+
+    // Calculate available space (with padding)
+    const padding = 40;
+    const cw = container.clientWidth - padding;
+    const ch = container.clientHeight - padding;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+
+    // Determine scale
+    const scale = Math.min(cw / iw, ch / ih);
+    
+    // Set Zoom (cap at 100% if image is smaller than screen, or allow scale down if larger)
+    let targetZoom = Math.min(scale, 1) * 100;
+    
+    // Ensure logical minimum
+    setZoom(targetZoom);
+}
+function resetView() { fitImageToScreen(); }
+function zoomIn() { setZoom(currentZoom.value + zoomStep); }
+function zoomOut() { setZoom(currentZoom.value - zoomStep); }
 function onWheel(e) {
     if (showPlaceholder.value) return;
     e.preventDefault();
     const zoomAmount = e.deltaY > 0 ? -zoomStep : zoomStep;
-    currentZoom.value = Math.max(10, currentZoom.value + zoomAmount);
+    setZoom(currentZoom.value + zoomAmount);
 }
 function onPointerDown(e) {
     if (showPlaceholder.value || e.button !== 0) return;
@@ -505,10 +545,9 @@ function onPointerDown(e) {
 }
 function onPointerMove(e) {
     if (!isPanning.value) return;
-    const dx = e.clientX - startPointerX;
-    const dy = e.clientY - startPointerY;
-    imageX.value = initialImageX + dx / (currentZoom.value / 100);
-    imageY.value = initialImageY + dy / (currentZoom.value / 100);
+    // Simple 1:1 movement
+    imageX.value = initialImageX + (e.clientX - startPointerX);
+    imageY.value = initialImageY + (e.clientY - startPointerY);
 }
 function onPointerUp() { isPanning.value = false; }
 
@@ -1154,7 +1193,7 @@ async function handleDrop(e) {
         </div>
       </TooltipProvider>
 
-      <div class="viewport flex-grow relative flex items-center justify-center overflow-hidden">
+      <div ref="viewportRef" class="viewport flex-grow relative overflow-hidden w-full h-full">
         <div v-if="showPlaceholder" class="placeholder-state text-center text-muted-foreground">
           <Image class="icon-lg w-16 h-16 mx-auto mb-4" />
           <h3 class="text-xl font-semibold mb-2">No Image Loaded</h3>
@@ -1170,7 +1209,8 @@ async function handleDrop(e) {
           @pointermove="onPointerMove"
           @pointerup="onPointerUp"
           @pointerleave="onPointerUp"
-          class="max-w-full max-h-full object-contain will-change-transform transition-[cursor] duration-75 ease-out"
+          @load="fitImageToScreen"
+          class="max-w-none max-h-none object-contain will-change-transform transition-[cursor] duration-75 ease-out origin-center"
         />
         <div v-if="isLoading" class="loading-overlay absolute inset-0 bg-background/25 backdrop-blur-sm flex justify-center items-center z-10">
           <div class="loading-content flex flex-col items-center gap-3">
