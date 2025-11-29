@@ -242,6 +242,9 @@ async function handleFileChange(e) {
     imageX.value = 0;
     imageY.value = 0;
     isComparing.value = false;
+
+    // Fit the original image to screen after load
+    setTimeout(fitImageToScreen, 100);
 }
 
 function processImage() {
@@ -409,7 +412,7 @@ function processImage() {
 function handleDownload(data, format, time, newWidth, newHeight, appliedOptions) {
     const mimeType = `image/${format.toLowerCase()}`;
     const blob = new Blob([data], { type: mimeType });
-    
+
     if (processedImageUrl.value) URL.revokeObjectURL(processedImageUrl.value);
     processedImageUrl.value = URL.createObjectURL(blob);
     processedImageFormat.value = format.toLowerCase();
@@ -418,6 +421,9 @@ function handleDownload(data, format, time, newWidth, newHeight, appliedOptions)
     isLoading.value = false;
     downloadBtnDisabled.value = false;
     isComparing.value = false;
+
+    // Fit the processed image to screen after load
+    setTimeout(fitImageToScreen, 100);
 
     const newSizeKB = (blob.size / 1024).toFixed(1);
     const percentageChange = (((blob.size - originalImageSize.value) / originalImageSize.value) * 100).toFixed(1);
@@ -499,11 +505,13 @@ function setZoom(newZoom) {
 }
 
 function fitImageToScreen() {
+    if (isComparing.value) return;
+
     if (!previewImageRef.value || !viewportRef.value) return;
-    
+
     const img = previewImageRef.value;
     const container = viewportRef.value;
-    
+
     // Reset panning
     imageX.value = 0;
     imageY.value = 0;
@@ -519,10 +527,10 @@ function fitImageToScreen() {
 
     // Determine scale
     const scale = Math.min(cw / iw, ch / ih);
-    
+
     // Set Zoom (cap at 100% if image is smaller than screen, or allow scale down if larger)
     let targetZoom = Math.min(scale, 1) * 100;
-    
+
     // Ensure logical minimum
     setZoom(targetZoom);
 }
@@ -532,8 +540,33 @@ function zoomOut() { setZoom(currentZoom.value - zoomStep); }
 function onWheel(e) {
     if (showPlaceholder.value) return;
     e.preventDefault();
-    const zoomAmount = e.deltaY > 0 ? -zoomStep : zoomStep;
-    setZoom(currentZoom.value + zoomAmount);
+
+    const oldZoom = currentZoom.value;
+    let newZoom = oldZoom + (e.deltaY > 0 ? -zoomStep : zoomStep);
+    newZoom = Math.max(10, Math.floor(newZoom / 10) * 10);
+    if (newZoom === oldZoom) return;
+
+    if (!viewportRef.value) return;
+
+    // Get viewport center
+    const viewportRect = viewportRef.value.getBoundingClientRect();
+    const viewportCenterX = viewportRect.left + viewportRect.width / 2;
+    const viewportCenterY = viewportRect.top + viewportRect.height / 2;
+
+    // Mouse position relative to viewport center
+    const Px = e.clientX - viewportCenterX;
+    const Py = e.clientY - viewportCenterY;
+
+    // Scale ratio
+    const r = newZoom / oldZoom;
+
+    // Adjust pan to zoom towards cursor
+    const newImageX = Px * (1 - r) + imageX.value * r;
+    const newImageY = Py * (1 - r) + imageY.value * r;
+
+    currentZoom.value = newZoom;
+    imageX.value = newImageX;
+    imageY.value = newImageY;
 }
 function onPointerDown(e) {
     if (showPlaceholder.value || e.button !== 0) return;
@@ -1138,7 +1171,7 @@ async function handleDrop(e) {
 
     <main class="canvas-area flex flex-col">
       <TooltipProvider>
-        <div class="toolbar flex items-center justify-between py-2 px-4 border-b h-14">
+        <div class="toolbar flex items-center justify-between p-4 border-b h-14">
           <div class="tool-group flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger as-child>
@@ -1193,7 +1226,7 @@ async function handleDrop(e) {
         </div>
       </TooltipProvider>
 
-      <div ref="viewportRef" class="viewport flex-grow relative overflow-hidden w-full h-full">
+      <div ref="viewportRef" class="viewport flex flex-col items-center justify-center flex-grow relative overflow-hidden w-full h-full">
         <div v-if="showPlaceholder" class="placeholder-state text-center text-muted-foreground">
           <Image class="icon-lg w-16 h-16 mx-auto mb-4" />
           <h3 class="text-xl font-semibold mb-2">No Image Loaded</h3>
@@ -1209,7 +1242,6 @@ async function handleDrop(e) {
           @pointermove="onPointerMove"
           @pointerup="onPointerUp"
           @pointerleave="onPointerUp"
-          @load="fitImageToScreen"
           class="max-w-none max-h-none object-contain will-change-transform transition-[cursor] duration-75 ease-out origin-center"
         />
         <div v-if="isLoading" class="loading-overlay absolute inset-0 bg-background/25 backdrop-blur-sm flex justify-center items-center z-10">
