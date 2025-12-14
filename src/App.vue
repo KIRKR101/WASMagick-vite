@@ -15,7 +15,7 @@ import {
 
 // Shadcn-Vue Components
 import { Button } from '@/components/ui/button';
-import { ZoomIn, ZoomOut, Fullscreen, Images, UploadCloud, Image, X, Moon, Sun, Bug, Download, RotateCw } from 'lucide-vue-next';
+import { ZoomIn, ZoomOut, Maximize, Images, UploadCloud, Image, X, Moon, Sun, Bug, Download, RotateCw, RefreshCcw } from 'lucide-vue-next';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -48,6 +48,7 @@ const processBtnDisabled = ref(true);
 const downloadBtnDisabled = ref(true);
 const isComparing = ref(false);
 const isDragging = ref(false);
+const globalDragging = ref(false);
 
 // Zoom & Pan State
 const currentZoom = ref(100);
@@ -72,15 +73,15 @@ const quality = ref([85]);
 const stripMeta = ref(true);
 
 // Geometry
-const resizeW = ref(0);
-const resizeH = ref(0);
+const resizeW = ref(null);
+const resizeH = ref(null);
 const rotate = ref('0');
 const flop = ref(false);
 const flip = ref(false);
 const borderColor = ref('#ffffff');
 const borderSize = ref([0]);
-const extentW = ref(0);
-const extentH = ref(0);
+const extentW = ref(null);
+const extentH = ref(null);
 const extentGravity = ref('Center');
 const extentBgColor = ref('#ffffff');
 const deskewThreshold = ref([0]);
@@ -144,16 +145,36 @@ onMounted(async () => {
         wasmLoaded.value = true;
         processBtnDisabled.value = false;
 
+        // Log initial version info if debug is on
         if (debugMode.value) {
             console.log('ImageMagick Version:', Magick.imageMagickVersion);
-            console.log('Delegates:', Magick.delegates);
-            console.log('Features:', Magick.features);
-            console.log('Quantum Depth:', Quantum.depth);
         }
     } catch (e) {
         statsMessage.value = "Error Loading WASM";
         console.error(e);
     }
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', handleKeydown);
+
+    // Global drag and drop
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      globalDragging.value = true;
+    });
+    document.addEventListener('dragleave', (e) => {
+      if (!e.relatedTarget || !document.documentElement.contains(e.relatedTarget)) {
+        globalDragging.value = false;
+      }
+    });
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      globalDragging.value = false;
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFileChange({ target: { files: [files[0]] } });
+      }
+    });
 });
 
 // --- Computed Properties ---
@@ -162,11 +183,9 @@ const imageStyle = computed(() => ({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    // Center anchor (-50%) + Pan Offset (imageX) + Scale
     transform: `translate(calc(-50% + ${imageX.value}px), calc(-50% + ${imageY.value}px)) scale(${currentZoom.value / 100})`,
     display: showPlaceholder.value ? 'none' : 'block',
     cursor: isPanning.value ? 'grabbing' : 'grab',
-    // Hide image until calculated to prevent flash of huge content
     opacity: (processedImageUrl.value || originalImageUrl.value) ? 1 : 0
 }));
 
@@ -214,7 +233,6 @@ function clearImage() {
     showPlaceholder.value = true;
     downloadBtnDisabled.value = true;
     statsMessage.value = "Ready";
-    // Reset view
     currentZoom.value = 100;
     imageX.value = 0;
     imageY.value = 0;
@@ -236,14 +254,10 @@ async function handleFileChange(e) {
     showPlaceholder.value = false;
     downloadBtnDisabled.value = true;
     statsMessage.value = "Ready";
-
-    // Reset view
     currentZoom.value = 100;
     imageX.value = 0;
     imageY.value = 0;
     isComparing.value = false;
-
-    // Fit the original image to screen after load
     setTimeout(fitImageToScreen, 100);
 }
 
@@ -254,13 +268,13 @@ function processImage() {
     }
 
     isLoading.value = true;
-    setTimeout(() => { // Allow UI to update
+    setTimeout(() => { 
         const startTime = performance.now();
-        const appliedOptions = {};
+        const appliedOptions = {}; // Object to track applied settings for Debug Mode
 
         try {
             ImageMagick.read(sourceBytes.value, (image) => {
-                // Geometry
+                // --- Geometry ---
                 if (resizeW.value > 0 || resizeH.value > 0) {
                     image.resize(resizeW.value || 0, resizeH.value || 0);
                     appliedOptions.resize = { width: resizeW.value, height: resizeH.value };
@@ -281,20 +295,20 @@ function processImage() {
                     const { r, g, b } = hexToRgb(borderColor.value);
                     image.borderColor = new MagickColor(r, g, b);
                     image.border(borderSize.value[0]);
-                    appliedOptions.border = { color: borderColor.value, size: borderSize.value[0] };
+                    appliedOptions.border = { size: borderSize.value[0], color: borderColor.value };
                 }
                 if (extentW.value > 0 || extentH.value > 0) {
                     const { r, g, b } = hexToRgb(extentBgColor.value);
                     image.backgroundColor = new MagickColor(r, g, b);
                     image.extent(extentW.value, extentH.value, Gravity[extentGravity.value]);
-                    appliedOptions.extent = { width: extentW.value, height: extentH.value, gravity: extentGravity.value, backgroundColor: extentBgColor.value };
+                    appliedOptions.extent = { width: extentW.value, height: extentH.value, gravity: extentGravity.value, bg: extentBgColor.value };
                 }
                 if (deskewThreshold.value[0] > 0) {
                     const angle = image.deskew(new Percentage(deskewThreshold.value[0]), deskewAutoCrop.value);
-                    appliedOptions.deskew = { angle, threshold: deskewThreshold.value[0], autoCrop: deskewAutoCrop.value };
+                    appliedOptions.deskew = { threshold: deskewThreshold.value[0], autoCrop: deskewAutoCrop.value, detectedAngle: angle };
                 }
 
-                // Color
+                // --- Color ---
                 if (brightness.value[0] !== 100 || saturation.value[0] !== 100 || hue.value[0] !== 100) {
                     image.modulate(new Percentage(brightness.value[0]), new Percentage(saturation.value[0]), new Percentage(hue.value[0]));
                     appliedOptions.modulate = { brightness: brightness.value[0], saturation: saturation.value[0], hue: hue.value[0] };
@@ -315,29 +329,28 @@ function processImage() {
                     image.autoOrient();
                     appliedOptions.autoOrient = true;
                 }
+                
                 if (levelBlackpoint.value[0] !== 0 || levelWhitepoint.value[0] !== 100 || levelGamma.value !== 1.0) {
                     const channels = levelChannels.value === 'All' ? Channels.All : Channels[levelChannels.value];
                     image.level(new Percentage(levelBlackpoint.value[0]), new Percentage(levelWhitepoint.value[0]), levelGamma.value, channels);
-                    appliedOptions.level = { blackPoint: levelBlackpoint.value[0], whitePoint: levelWhitepoint.value[0], gamma: levelGamma.value, channels: levelChannels.value };
+                    appliedOptions.level = { black: levelBlackpoint.value[0], white: levelWhitepoint.value[0], gamma: levelGamma.value, channels: levelChannels.value };
                 }
                 if (thresholdPercentage.value[0] !== 50) {
                     const selectedThresholdChannels = thresholdChannels.value === 'All' ? Channels.All : Channels[thresholdChannels.value];
                     image.threshold(new Percentage(thresholdPercentage.value[0]), selectedThresholdChannels);
-                    appliedOptions.threshold = { percentage: thresholdPercentage.value[0], channels: thresholdChannels.value };
+                    appliedOptions.threshold = { percent: thresholdPercentage.value[0], channels: thresholdChannels.value };
                 }
-
                 if (sigmoidalContrast.value[0] !== 0) {
                     const sigmoidalChannelsSelected = sigmoidalChannels.value === 'All' ? Channels.All : Channels[sigmoidalChannels.value];
                     image.sigmoidalContrast(sigmoidalContrast.value[0], new Percentage(sigmoidalMidpoint.value[0]), sigmoidalChannelsSelected);
-                    appliedOptions.sigmoidalContrast = { contrast: sigmoidalContrast.value[0], midpoint: sigmoidalMidpoint.value[0], channels: sigmoidalChannels.value };
+                    appliedOptions.sigmoidal = { contrast: sigmoidalContrast.value[0], midpoint: sigmoidalMidpoint.value[0] };
                 }
-
                 if (colorSpace.value !== 'RGB') {
                     image.colorSpace = ColorSpace[colorSpace.value];
                     appliedOptions.colorSpace = colorSpace.value;
                 }
 
-                // Filters
+                // --- Filters ---
                 if (blur.value[0] > 0) {
                     image.blur(blur.value[0], blur.value[0] / 2);
                     appliedOptions.blur = blur.value[0];
@@ -348,13 +361,13 @@ function processImage() {
                     appliedOptions.sharpen = sharpen.value[0];
                 }
 
-                // Effects
+                // --- Effects ---
                 if (effect.value !== "none") {
                     appliedOptions.effect = effect.value;
                     switch (effect.value) {
                         case "grayscale": image.grayscale(); break;
-                        case "sepia":
-                            image.sepiaTone(new Percentage(sepiaThreshold.value[0]));
+                        case "sepia": 
+                            image.sepiaTone(new Percentage(sepiaThreshold.value[0])); 
                             appliedOptions.sepiaThreshold = sepiaThreshold.value[0];
                             break;
                         case "charcoal": image.charcoal(); break;
@@ -365,17 +378,17 @@ function processImage() {
                             image.cannyEdge(radius, sigma, new Percentage(cannyEdgeLower.value[0]), new Percentage(cannyEdgeUpper.value[0]));
                             appliedOptions.cannyEdge = { strength: cannyEdgeStrength.value[0], lower: cannyEdgeLower.value[0], upper: cannyEdgeUpper.value[0] };
                             break;
-                        case "oilpaint":
-                            image.oilPaint(oilpaintRadius.value[0]);
-                            appliedOptions.oilpaintRadius = oilpaintRadius.value[0];
+                        case "oilpaint": 
+                            image.oilPaint(oilpaintRadius.value[0]); 
+                            appliedOptions.oilPaintRadius = oilpaintRadius.value[0];
                             break;
-                        case "solarize":
-                            image.solarize(new Percentage(solarizeFactor.value[0]));
+                        case "solarize": 
+                            image.solarize(new Percentage(solarizeFactor.value[0])); 
                             appliedOptions.solarizeFactor = solarizeFactor.value[0];
                             break;
                         case "bilateralBlur":
                             image.bilateralBlur(bilateralWidth.value[0], bilateralHeight.value[0], bilateralIntensitySigma.value[0], bilateralSpatialSigma.value[0]);
-                            appliedOptions.bilateralBlur = { width: bilateralWidth.value[0], height: bilateralHeight.value[0], intensitySigma: bilateralIntensitySigma.value[0], spatialSigma: bilateralSpatialSigma.value[0] };
+                            appliedOptions.bilateral = { w: bilateralWidth.value[0], h: bilateralHeight.value[0], iSig: bilateralIntensitySigma.value[0], sSig: bilateralSpatialSigma.value[0] };
                             break;
                     }
                 }
@@ -393,11 +406,14 @@ function processImage() {
 
                 image.write(MagickFormat[imageFormat.value], (data) => {
                     const endTime = performance.now();
+                    
                     if (debugMode.value) {
-                        appliedOptions.dimensions = { width: finalWidth, height: finalHeight };
-                        appliedOptions.fileSize = data.length;
+                        appliedOptions.outputDimensions = { width: finalWidth, height: finalHeight };
+                        appliedOptions.outputSize = data.length;
+                        appliedOptions.processTime = Math.round(endTime - startTime) + 'ms';
                         console.log('ImageMagickSettings', appliedOptions);
                     }
+
                     handleDownload(data, imageFormat.value, Math.round(endTime - startTime), finalWidth, finalHeight, appliedOptions);
                 });
             });
@@ -421,13 +437,11 @@ function handleDownload(data, format, time, newWidth, newHeight, appliedOptions)
     isLoading.value = false;
     downloadBtnDisabled.value = false;
     isComparing.value = false;
-
-    // Fit the processed image to screen after load
     setTimeout(fitImageToScreen, 100);
 
     const newSizeKB = (blob.size / 1024).toFixed(1);
     const percentageChange = (((blob.size - originalImageSize.value) / originalImageSize.value) * 100).toFixed(1);
-    statsMessage.value = `Processed in ${time}ms | New Size: ${newSizeKB} KB (${percentageChange > 0 ? '+' : ''}${percentageChange}%)`;
+    statsMessage.value = `Processed in ${time}ms\nNew Size: ${newSizeKB} KB (${percentageChange > 0 ? '+' : ''}${percentageChange}%)`;
 }
 
 function downloadImage() {
@@ -442,27 +456,31 @@ function downloadImage() {
 }
 
 function resetSettings() {
-    // Export Settings
     imageFormat.value = 'WebP';
     quality.value = [85];
     stripMeta.value = true;
+    resetGeometry();
+    resetColor();
+    resetFilters();
+}
 
-    // Geometry
-    resizeW.value = 0;
-    resizeH.value = 0;
+function resetGeometry() {
+    resizeW.value = null;
+    resizeH.value = null;
     rotate.value = '0';
     flop.value = false;
     flip.value = false;
     borderColor.value = '#ffffff';
     borderSize.value = [0];
-    extentW.value = 0;
-    extentH.value = 0;
+    extentW.value = null;
+    extentH.value = null;
     extentGravity.value = 'Center';
     extentBgColor.value = '#ffffff';
     deskewThreshold.value = [0];
     deskewAutoCrop.value = true;
+}
 
-    // Color Adjust
+function resetColor() {
     brightness.value = [100];
     saturation.value = [100];
     hue.value = [100];
@@ -480,8 +498,9 @@ function resetSettings() {
     sigmoidalContrast.value = [0];
     sigmoidalMidpoint.value = [50];
     sigmoidalChannels.value = 'All';
+}
 
-    // Filters & Effects
+function resetFilters() {
     effect.value = 'none';
     blur.value = [0];
     sharpen.value = [0];
@@ -506,32 +525,19 @@ function setZoom(newZoom) {
 
 function fitImageToScreen() {
     if (isComparing.value) return;
-
     if (!previewImageRef.value || !viewportRef.value) return;
-
     const img = previewImageRef.value;
     const container = viewportRef.value;
-
-    // Reset panning
     imageX.value = 0;
     imageY.value = 0;
-
     if (!img.naturalWidth || !img.naturalHeight) return;
-
-    // Calculate available space (with padding)
     const padding = 40;
     const cw = container.clientWidth - padding;
     const ch = container.clientHeight - padding;
     const iw = img.naturalWidth;
     const ih = img.naturalHeight;
-
-    // Determine scale
     const scale = Math.min(cw / iw, ch / ih);
-
-    // Set Zoom (cap at 100% if image is smaller than screen, or allow scale down if larger)
     let targetZoom = Math.min(scale, 1) * 100;
-
-    // Ensure logical minimum
     setZoom(targetZoom);
 }
 function resetView() { fitImageToScreen(); }
@@ -540,30 +546,19 @@ function zoomOut() { setZoom(currentZoom.value - zoomStep); }
 function onWheel(e) {
     if (showPlaceholder.value) return;
     e.preventDefault();
-
     const oldZoom = currentZoom.value;
     let newZoom = oldZoom + (e.deltaY > 0 ? -zoomStep : zoomStep);
     newZoom = Math.max(10, Math.floor(newZoom / 10) * 10);
     if (newZoom === oldZoom) return;
-
     if (!viewportRef.value) return;
-
-    // Get viewport center
     const viewportRect = viewportRef.value.getBoundingClientRect();
     const viewportCenterX = viewportRect.left + viewportRect.width / 2;
     const viewportCenterY = viewportRect.top + viewportRect.height / 2;
-
-    // Mouse position relative to viewport center
     const Px = e.clientX - viewportCenterX;
     const Py = e.clientY - viewportCenterY;
-
-    // Scale ratio
     const r = newZoom / oldZoom;
-
-    // Adjust pan to zoom towards cursor
     const newImageX = Px * (1 - r) + imageX.value * r;
     const newImageY = Py * (1 - r) + imageY.value * r;
-
     currentZoom.value = newZoom;
     imageX.value = newImageX;
     imageY.value = newImageY;
@@ -578,7 +573,6 @@ function onPointerDown(e) {
 }
 function onPointerMove(e) {
     if (!isPanning.value) return;
-    // Simple 1:1 movement
     imageX.value = initialImageX + (e.clientX - startPointerX);
     imageY.value = initialImageY + (e.clientY - startPointerY);
 }
@@ -588,11 +582,9 @@ function handleDragOver(e) {
     e.preventDefault();
     isDragging.value = true;
 }
-
 function handleDragLeave() {
     isDragging.value = false;
 }
-
 async function handleDrop(e) {
     e.preventDefault();
     isDragging.value = false;
@@ -601,21 +593,48 @@ async function handleDrop(e) {
         handleFileChange({ target: { files: [files[0]] } });
     }
 }
-
+function handleKeydown(e) {
+    const cmdOrCtrl = e.ctrlKey || e.metaKey;
+    if (cmdOrCtrl && e.key === 'Enter') {
+        e.preventDefault();
+        if (sourceBytes.value) processImage();
+    } else if (cmdOrCtrl && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        downloadImage();
+    } else if (e.key === '0') {
+        e.preventDefault();
+        resetView();
+    } else if (cmdOrCtrl && e.key === '=') {
+        e.preventDefault();
+        zoomIn();
+    } else if (cmdOrCtrl && e.key === '-') {
+        e.preventDefault();
+        zoomOut();
+    }
+}
 </script>
 
 <template>
-  <div class="app-layout min-h-screen grid grid-cols-[320px_1fr] dark:bg-zinc-950">
-    <aside class="sidebar bg-background flex flex-col border-r shadow-lg h-screen">
-      <header class="brand flex items-center justify-between gap-2 p-4 border-b h-14">
-        <h1 class="text-xl font-semibold text-foreground">WASMagick</h1>
-
+  <div class="app-layout min-h-screen grid grid-cols-[360px_1fr] dark:bg-zinc-950">
+    <!-- Global drag and drop overlay -->
+    <div v-if="globalDragging" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="text-center">
+        <UploadCloud class="w-16 h-16 mx-auto mb-4 text-white" />
+        <p class="text-lg font-medium text-white">Drop your image here</p>
+      </div>
+    </div>
+    <aside class="sidebar bg-background flex flex-col border-r shadow-lg h-screen z-10">
+      <header class="brand flex items-center justify-between gap-2 px-4 py-3 border-b h-14 shrink-0">
         <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-foreground">WASMagick</h1>
+        </div>
+
+        <div class="flex items-center gap-1">
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger as-child>
                         <Button @click="debugMode = !debugMode" :variant="debugMode ? 'secondary' : 'ghost'" size="icon" class="w-8 h-8">
-                            <Bug class="w-5 h-5" />
+                            <Bug class="w-4 h-4" />
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -625,546 +644,469 @@ async function handleDrop(e) {
             </TooltipProvider>
 
             <Button @click="toggleDarkMode" variant="ghost" size="icon" class="w-8 h-8">
-                <Sun class="w-5 h-5 dark:hidden" />
-                <Moon class="w-5 h-5 hidden dark:block" />
+                <Sun class="w-4 h-4 dark:hidden" />
+                <Moon class="w-4 h-4 hidden dark:block" />
             </Button>
         </div>
       </header>
 
-      <div class="scroll-container flex-grow overflow-y-auto p-4 custom-scrollbar">
-        <div class="panel-section mb-6">
+      <div class="scroll-container flex-grow overflow-y-auto px-4 py-6 custom-scrollbar space-y-6">
+        
+        <!-- File Input Section -->
+        <div class="section-upload">
           <div v-if="!originalImageUrl">
             <Label
               for="fileInput"
-              class="drop-zone flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200"
-              :class="{ 'border-primary bg-primary/5': isDragging, 'border-border bg-muted/20 hover:border-muted-foreground/50': !isDragging }"
+              class="drop-zone flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200"
+              :class="{ 'border-primary bg-primary/5': isDragging, 'border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/30': !isDragging }"
               @dragover.prevent="handleDragOver"
               @dragleave="handleDragLeave"
               @drop.prevent="handleDrop"
             >
-              <UploadCloud class="w-10 h-10 mb-2 text-muted-foreground" />
-              <p class="text-sm text-muted-foreground">Click or Drop Image</p>
+              <UploadCloud class="w-10 h-10 mb-3 text-muted-foreground" />
+              <p class="text-sm font-medium text-foreground">Click or Drop Image</p>
+              <p class="text-xs text-muted-foreground mt-1">Supports common formats</p>
               <Input type="file" id="fileInput" accept="image/*" @change="handleFileChange" class="hidden" />
             </Label>
           </div>
-          <div v-else class="file-preview flex items-center gap-2 p-4 bg-muted/10 border rounded-lg">
-            <img :src="originalImageUrl" class="w-16 h-16 object-cover rounded" />
-            <span class="text-sm text-foreground truncate flex-1">{{ originalName }}</span>
-            <Button @click="clearImage" variant="ghost" size="icon" class="w-6 h-6 shrink-0">
+          <div v-else class="file-preview relative group flex items-start gap-3 p-3 bg-muted/30 border rounded-lg shadow-sm">
+            <div class="w-16 h-16 shrink-0 bg-background rounded-md border overflow-hidden flex items-center justify-center">
+                <img :src="originalImageUrl" class="w-full h-full object-cover" />
+            </div>
+            <div class="flex-1 min-w-0 flex flex-col justify-center h-16">
+                <span class="text-sm font-medium text-foreground truncate block">{{ originalName }}</span>
+                <span class="text-xs text-muted-foreground">{{ (originalImageSize / 1024).toFixed(1) }} KB</span>
+            </div>
+            <Button @click="clearImage" variant="ghost" size="icon" class="w-6 h-6 absolute top-2 right-2 text-muted-foreground hover:text-destructive">
               <X class="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        <Button @click="resetSettings" variant="outline" class="w-full mb-6">
-          <RotateCw class="w-4 h-4 mr-2" />
-          Reset Settings
+        <Button @click="resetSettings" variant="secondary" size="sm" class="w-full text-muted-foreground hover:text-foreground">
+          <RotateCw class="w-3.5 h-3.5 mr-2" />
+          Reset All Settings
         </Button>
 
-        <Accordion class="accordion-wrapper pb-4" type="multiple" collapsible>
-          <AccordionItem value="item-1">
-            <AccordionTrigger class="font-semibold text-foreground hover:no-underline">Export Settings</AccordionTrigger>
-            <AccordionContent class="accordion-content flex flex-col gap-2">
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Format</Label>
-                <Select v-model="imageFormat">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Select a format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Jpeg">JPEG</SelectItem>
-                    <SelectItem value="Png">PNG</SelectItem>
-                    <SelectItem value="WebP">WebP</SelectItem>
-                    <SelectItem value="Jxl">JXL</SelectItem>
-                    <SelectItem value="Avif">AVIF</SelectItem>
-                    <SelectItem value="Gif">GIF</SelectItem>
-                    <SelectItem value="Tiff">TIFF</SelectItem>
-                  </SelectContent>
-                </Select>
+        <!-- Tools Accordion -->
+        <Accordion class="accordion-wrapper w-full" type="multiple" collapsible>
+          
+          <!-- Export Settings -->
+          <AccordionItem value="export" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
+            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors">Export Settings</AccordionTrigger>
+            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
+              <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1.5">
+                    <Label class="text-xs text-muted-foreground">Format</Label>
+                    <Select v-model="imageFormat">
+                      <SelectTrigger class="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Jpeg">JPEG</SelectItem>
+                        <SelectItem value="Png">PNG</SelectItem>
+                        <SelectItem value="WebP">WebP</SelectItem>
+                        <SelectItem value="Avif">AVIF</SelectItem>
+                        <SelectItem value="Jxl">JXL</SelectItem>
+                        <SelectItem value="Tiff">TIFF</SelectItem>
+                        <SelectItem value="Gif">GIF</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <Label class="text-xs text-muted-foreground">Quality</Label>
+                        <span class="text-xs font-mono text-primary">{{ quality[0] }}</span>
+                    </div>
+                    <div class="h-9 flex items-center">
+                        <Slider v-model="quality" :max="100" :min="1" :step="1" />
+                    </div>
+                  </div>
               </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Quality
-                  <span class="text-xs font-medium text-primary">{{ quality[0] }}</span>
-                </Label>
-                <Slider v-model="quality" :max="100" :min="1" :step="1" />
-              </div>
-              <div class="flex items-center space-x-2">
-                <Switch id="stripMeta" v-model="stripMeta" />
-                <Label for="stripMeta" class="text-sm text-muted-foreground">Strip EXIF Metadata</Label>
+              
+              <div class="flex items-center justify-between bg-muted/30 p-2 rounded-md border">
+                <Label for="stripMeta" class="text-xs font-medium cursor-pointer">Strip EXIF Data</Label>
+                <Switch id="stripMeta" v-model="stripMeta" class="scale-75 origin-right" />
               </div>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="item-2">
-            <AccordionTrigger class="font-semibold text-foreground hover:no-underline">Geometry</AccordionTrigger>
-            <AccordionContent class="accordion-content flex flex-col gap-2">
-              <div class="control-grid grid grid-cols-2 gap-2">
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground">Width (px, 0 = auto)</Label>
-                  <Input type="number" v-model="resizeW" min="0" class="w-full" />
+          <!-- Geometry -->
+          <AccordionItem value="geometry" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
+            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
+              <div class="flex items-center gap-2">
+                  <span>Geometry</span>
+                  <div v-if="resizeW || resizeH || rotate !== '0'" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+              </div>
+              <Button @click.stop="resetGeometry" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Geometry">
+                <RefreshCcw class="w-3 h-3" />
+              </Button>
+            </AccordionTrigger>
+            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
+              <!-- Resize -->
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1.5">
+                  <Label class="text-xs text-muted-foreground">Width (px)</Label>
+                  <Input type="number" v-model="resizeW" min="0" placeholder="Auto" class="h-8 text-sm no-spinner" />
                 </div>
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground">Height (px, 0 = auto)</Label>
-                  <Input type="number" v-model="resizeH" min="0" class="w-full" />
+                <div class="space-y-1.5">
+                  <Label class="text-xs text-muted-foreground">Height (px)</Label>
+                  <Input type="number" v-model="resizeH" min="0" placeholder="Auto" class="h-8 text-sm no-spinner" />
                 </div>
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Rotate</Label>
-                <Select v-model="rotate">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">0°</SelectItem>
-                    <SelectItem value="90">90°</SelectItem>
-                    <SelectItem value="180">180°</SelectItem>
-                    <SelectItem value="-90">-90°</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div class="flex items-center space-x-4 mb-1">
-                <div class="flex items-center space-x-2">
-                  <Switch id="flop" v-model="flop" />
-                  <Label for="flop" class="text-sm text-muted-foreground">Flop</Label>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <Switch id="flip" v-model="flip" />
-                  <Label for="flip" class="text-sm text-muted-foreground">Flip</Label>
-                </div>
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Border Color</Label>
-                <Input type="color" v-model="borderColor" class="h-10 w-full" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Border Size
-                  <span class="text-xs font-medium text-primary">{{ borderSize[0] }}</span>
-                </Label>
-                <Slider v-model="borderSize" :max="50" :min="0" :step="1" />
-              </div>
-              <div class="control-grid grid grid-cols-2 gap-2">
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground">Extent Width (px)</Label>
-                  <Input type="number" v-model="extentW" min="0" class="w-full" />
-                </div>
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground">Extent Height (px)</Label>
-                  <Input type="number" v-model="extentH" min="0" class="w-full" />
-                </div>
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Extent Gravity</Label>
-                <Select v-model="extentGravity">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Forget">Forget</SelectItem>
-                    <SelectItem value="NorthWest">NorthWest</SelectItem>
-                    <SelectItem value="North">North</SelectItem>
-                    <SelectItem value="NorthEast">NorthEast</SelectItem>
-                    <SelectItem value="West">West</SelectItem>
-                    <SelectItem value="Center">Center</SelectItem>
-                    <SelectItem value="East">East</SelectItem>
-                    <SelectItem value="SouthWest">SouthWest</SelectItem>
-                    <SelectItem value="South">South</SelectItem>
-                    <SelectItem value="SouthEast">SouthEast</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Extent Background Color</Label>
-                <Input type="color" v-model="extentBgColor" class="h-10 w-full" />
               </div>
 
-              <div class="field">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                        Deskew Threshold
-                        <span class="text-xs font-medium text-primary">{{ deskewThreshold[0] }}</span>
-                      </Label>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Removes skew from an image, common in scanned documents. Returns the detected skew angle.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Slider v-model="deskewThreshold" :max="100" :min="0" :step="1" />
+              <!-- Rotate & Flip -->
+              <div class="grid grid-cols-2 gap-3 items-end">
+                <div class="space-y-1.5">
+                    <Label class="text-xs text-muted-foreground">Rotate</Label>
+                    <Select v-model="rotate">
+                    <SelectTrigger class="h-8 text-sm">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="0">0°</SelectItem>
+                        <SelectItem value="90">90°</SelectItem>
+                        <SelectItem value="180">180°</SelectItem>
+                        <SelectItem value="-90">-90°</SelectItem>
+                    </SelectContent>
+                    </Select>
+                </div>
+                <div class="flex items-center justify-around h-8 bg-muted/30 rounded-md border">
+                    <div class="flex items-center gap-1.5" title="Flop (Horizontal Mirror)">
+                        <Switch id="flop" v-model="flop" class="scale-75" />
+                        <Label for="flop" class="text-xs cursor-pointer">Flop</Label>
+                    </div>
+                    <div class="w-px h-4 bg-border"></div>
+                    <div class="flex items-center gap-1.5" title="Flip (Vertical Mirror)">
+                        <Switch id="flip" v-model="flip" class="scale-75" />
+                        <Label for="flip" class="text-xs cursor-pointer">Flip</Label>
+                    </div>
+                </div>
               </div>
-              <div class="flex items-center space-x-2">
-                <Switch id="deskewAutoCrop" v-model="deskewAutoCrop" />
-                <Label for="deskewAutoCrop" class="text-sm text-muted-foreground">Deskew Auto Crop</Label>
+
+              <!-- Border -->
+              <div class="space-y-3 pt-2 border-t">
+                  <Label class="text-xs font-semibold text-foreground/80">Border</Label>
+                  <div class="flex gap-3">
+                      <div class="flex-1 space-y-1.5">
+                         <div class="flex justify-between">
+                             <Label class="text-xs text-muted-foreground">Size</Label>
+                             <span class="text-xs font-mono text-muted-foreground">{{ borderSize[0] }}px</span>
+                         </div>
+                         <Slider v-model="borderSize" :max="50" :min="0" :step="1" />
+                      </div>
+                      <div class="w-12 space-y-1.5">
+                          <Label class="text-xs text-muted-foreground">Color</Label>
+                          <div class="h-8 w-full rounded-md border overflow-hidden p-0.5 relative">
+                              <input type="color" v-model="borderColor" class="absolute inset-0 w-[150%] h-[150%] -top-1/4 -left-1/4 p-0 border-0 cursor-pointer" />
+                          </div>
+                      </div>
+                  </div>
               </div>
+
+              <!-- Extent -->
+              <div class="space-y-3 pt-2 border-t">
+                <Label class="text-xs font-semibold text-foreground/80">Extent (Canvas)</Label>
+                <div class="grid grid-cols-2 gap-3">
+                    <Input type="number" v-model="extentW" min="0" placeholder="W" class="h-8 text-sm no-spinner" />
+                    <Input type="number" v-model="extentH" min="0" placeholder="H" class="h-8 text-sm no-spinner" />
+                </div>
+                <div class="grid grid-cols-[1fr_3rem] gap-3">
+                     <Select v-model="extentGravity">
+                        <SelectTrigger class="h-8 text-sm">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Center">Center</SelectItem>
+                            <SelectItem value="NorthWest">Top Left</SelectItem>
+                            <SelectItem value="North">Top</SelectItem>
+                            <SelectItem value="NorthEast">Top Right</SelectItem>
+                            <SelectItem value="West">Left</SelectItem>
+                            <SelectItem value="East">Right</SelectItem>
+                            <SelectItem value="SouthWest">Bot Left</SelectItem>
+                            <SelectItem value="South">Bottom</SelectItem>
+                            <SelectItem value="SouthEast">Bot Right</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div class="h-8 rounded-md border overflow-hidden relative">
+                         <input type="color" v-model="extentBgColor" class="absolute inset-0 w-[150%] h-[150%] -top-1/4 -left-1/4 p-0 border-0 cursor-pointer" />
+                    </div>
+                </div>
+              </div>
+
+              <!-- Deskew -->
+               <div class="space-y-3 pt-2 border-t">
+                 <div class="flex items-center justify-between">
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <Label class="text-xs font-semibold text-foreground/80 cursor-help underline decoration-dotted">Deskew</Label>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Auto-straighten scanned documents</p></TooltipContent>
+                        </Tooltip>
+                     </TooltipProvider>
+                     <div class="flex items-center gap-2">
+                         <Label for="deskewAuto" class="text-[10px] text-muted-foreground">Auto Crop</Label>
+                         <Switch id="deskewAuto" v-model="deskewAutoCrop" class="scale-75" />
+                     </div>
+                 </div>
+                 <div class="space-y-1.5">
+                     <div class="flex justify-between">
+                        <Label class="text-xs text-muted-foreground">Threshold</Label>
+                        <span class="text-xs font-mono text-muted-foreground">{{ deskewThreshold[0] }}%</span>
+                     </div>
+                     <Slider v-model="deskewThreshold" :max="100" :min="0" :step="1" />
+                 </div>
+               </div>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="item-3">
-            <AccordionTrigger class="font-semibold text-foreground hover:no-underline">Color Adjust</AccordionTrigger>
-            <AccordionContent class="accordion-content flex flex-col gap-2">
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Brightness
-                  <span class="text-xs font-medium text-primary">{{ brightness[0] }}%</span>
-                </Label>
-                <Slider v-model="brightness" :min="0" :max="200" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Saturation
-                  <span class="text-xs font-medium text-primary">{{ saturation[0] }}%</span>
-                </Label>
-                <Slider v-model="saturation" :min="0" :max="300" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Hue
-                  <span class="text-xs font-medium text-primary">{{ hue[0] }}%</span>
-                </Label>
-                <Slider v-model="hue" :min="0" :max="200" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Contrast
-                  <span class="text-xs font-medium text-primary">{{ contrast[0] }}</span>
-                </Label>
-                <Slider v-model="contrast" :min="-100" :max="100" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Color Space</Label>
-                <Select v-model="colorSpace">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Select color space" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="RGB">RGB</SelectItem>
-                    <SelectItem value="Gray">Gray</SelectItem>
-                    <SelectItem value="CMYK">CMYK</SelectItem>
-                    <SelectItem value="HSL">HSL</SelectItem>
-                    <SelectItem value="HSV">HSV</SelectItem>
-                    <SelectItem value="HWB">HWB</SelectItem>
-                    <SelectItem value="LAB">LAB</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <!-- Color Adjust -->
+          <AccordionItem value="color" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
+            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
+                <div class="flex items-center gap-2">
+                    <span>Color Adjust</span>
+                    <div v-if="brightness[0] !== 100 || contrast[0] !== 0 || saturation[0] !== 100" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                </div>
+                <Button @click.stop="resetColor" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Colors">
+                    <RefreshCcw class="w-3 h-3" />
+                </Button>
+            </AccordionTrigger>
+            <AccordionContent class="px-3 pb-4 pt-1 space-y-5">
+                <!-- Main Sliders -->
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <Label class="text-xs text-muted-foreground">Brightness</Label>
+                            <span class="text-xs font-mono text-primary">{{ brightness[0] }}%</span>
+                        </div>
+                        <Slider v-model="brightness" :min="0" :max="200" />
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <Label class="text-xs text-muted-foreground">Contrast</Label>
+                            <span class="text-xs font-mono text-primary">{{ contrast[0] }}</span>
+                        </div>
+                        <Slider v-model="contrast" :min="-100" :max="100" />
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <Label class="text-xs text-muted-foreground">Saturation</Label>
+                            <span class="text-xs font-mono text-primary">{{ saturation[0] }}%</span>
+                        </div>
+                        <Slider v-model="saturation" :min="0" :max="300" />
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <Label class="text-xs text-muted-foreground">Hue</Label>
+                            <span class="text-xs font-mono text-primary">{{ hue[0] }}%</span>
+                        </div>
+                        <Slider v-model="hue" :min="0" :max="200" />
+                    </div>
+                </div>
 
-              <hr class="my-4 border-border">
-              
-              <div class="flex flex-col gap-2 mb-2">
-                <TooltipProvider>
-                  <div class="flex items-center space-x-2">
-                    <Switch id="normalize" v-model="normalizeImage" />
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label for="normalize" class="text-sm text-muted-foreground cursor-help">Normalize</Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Normalize image (increase contrast by normalizing the pixel values to span the full range of color values).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <div class="flex items-center space-x-2">
-                    <Switch id="autoLevel" v-model="autoLevel" />
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label for="autoLevel" class="text-sm text-muted-foreground cursor-help">Auto Level</Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Adjusts the levels of an image channel by scaling the minimum and maximum values to the full quantum range.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <div class="flex items-center space-x-2">
-                    <Switch id="autoOrient" v-model="autoOrient" />
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label for="autoOrient" class="text-sm text-muted-foreground cursor-help">Auto Orient</Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Adjusts an image so that its orientation is suitable for viewing.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </TooltipProvider>
-              </div>
-              
-              <hr class="my-4 border-border">
-              
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Level Black Point
-                  <span class="text-xs font-medium text-primary">{{ levelBlackpoint[0] }}</span>
-                </Label>
-                <Slider v-model="levelBlackpoint" :max="100" :min="0" :step="1" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Level White Point
-                  <span class="text-xs font-medium text-primary">{{ levelWhitepoint[0] }}</span>
-                </Label>
-                <Slider v-model="levelWhitepoint" :max="100" :min="0" :step="1" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Level Gamma</Label>
-                <Input type="number" v-model="levelGamma" step="0.1" class="w-full" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Level Channels</Label>
-                <Select v-model="levelChannels">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All</SelectItem>
-                    <SelectItem value="Red">Red</SelectItem>
-                    <SelectItem value="Green">Green</SelectItem>
-                    <SelectItem value="Blue">Blue</SelectItem>
-                    <SelectItem value="Alpha">Alpha</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <hr class="my-4 border-border">
-              
-              <div class="field">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                        Threshold
-                        <span class="text-xs font-medium text-primary">{{ thresholdPercentage[0] }}</span>
-                      </Label>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Converts pixels above the threshold to white and pixels below to black, creating a black and white image.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Slider v-model="thresholdPercentage" :max="100" :min="0" :step="1" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Threshold Channels</Label>
-                <Select v-model="thresholdChannels">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All</SelectItem>
-                    <SelectItem value="Red">Red</SelectItem>
-                    <SelectItem value="Green">Green</SelectItem>
-                    <SelectItem value="Blue">Blue</SelectItem>
-                    <SelectItem value="Alpha">Alpha</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div class="space-y-1.5 pt-2 border-t">
+                    <Label class="text-xs text-muted-foreground">Color Space</Label>
+                    <Select v-model="colorSpace">
+                        <SelectTrigger class="h-8 text-sm">
+                            <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="RGB">RGB</SelectItem>
+                            <SelectItem value="Gray">Gray</SelectItem>
+                            <SelectItem value="CMYK">CMYK</SelectItem>
+                            <SelectItem value="HSL">HSL</SelectItem>
+                            <SelectItem value="HSV">HSV</SelectItem>
+                            <SelectItem value="LAB">LAB</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
-              <div class="field">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger as-child>
-                      <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                        Sigmoidal Contrast
-                        <span class="text-xs font-medium text-primary">{{ sigmoidalContrast[0] }}</span>
-                      </Label>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Adjust the image contrast with a non-linear sigmoidal contrast algorithm, which often produces more photorealistic results than a linear contrast adjustment.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Slider v-model="sigmoidalContrast" :max="20" :min="-20" :step="1" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Sigmoidal Midpoint
-                  <span class="text-xs font-medium text-primary">{{ sigmoidalMidpoint[0] }}</span>
-                </Label>
-                <Slider v-model="sigmoidalMidpoint" :max="100" :min="0" :step="1" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Sigmoidal Channels</Label>
-                <Select v-model="sigmoidalChannels">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All</SelectItem>
-                    <SelectItem value="Red">Red</SelectItem>
-                    <SelectItem value="Green">Green</SelectItem>
-                    <SelectItem value="Blue">Blue</SelectItem>
-                    <SelectItem value="Alpha">Alpha</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <!-- Auto Toggles -->
+                <div class="grid grid-cols-1 gap-2 pt-2 border-t">
+                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                        <Label class="text-xs cursor-pointer" for="normalize">Normalize</Label>
+                        <Switch id="normalize" v-model="normalizeImage" class="scale-75" />
+                     </div>
+                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                        <Label class="text-xs cursor-pointer" for="autoLevel">Auto Level</Label>
+                        <Switch id="autoLevel" v-model="autoLevel" class="scale-75" />
+                     </div>
+                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                        <Label class="text-xs cursor-pointer" for="autoOrient">Auto Orient</Label>
+                        <Switch id="autoOrient" v-model="autoOrient" class="scale-75" />
+                     </div>
+                </div>
+
+                <!-- Levels -->
+                <div class="space-y-3 pt-2 border-t">
+                    <div class="flex items-center justify-between mb-2">
+                        <Label class="text-xs font-semibold text-foreground/80">Levels</Label>
+                        <Select v-model="levelChannels">
+                            <SelectTrigger class="h-6 w-20 text-[10px] px-2">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="All">All</SelectItem>
+                                <SelectItem value="Red">Red</SelectItem>
+                                <SelectItem value="Green">Green</SelectItem>
+                                <SelectItem value="Blue">Blue</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div class="space-y-3">
+                         <div class="space-y-1.5">
+                             <div class="flex justify-between"><Label class="text-[10px] text-muted-foreground">Black Point</Label><span class="text-[10px] font-mono">{{ levelBlackpoint[0] }}</span></div>
+                             <Slider v-model="levelBlackpoint" :max="100" :min="0" :step="1" />
+                         </div>
+                         <div class="space-y-1.5">
+                             <div class="flex justify-between"><Label class="text-[10px] text-muted-foreground">White Point</Label><span class="text-[10px] font-mono">{{ levelWhitepoint[0] }}</span></div>
+                             <Slider v-model="levelWhitepoint" :max="100" :min="0" :step="1" />
+                         </div>
+                         <div class="space-y-1.5">
+                            <Label class="text-[10px] text-muted-foreground">Gamma</Label>
+                            <Input type="number" v-model="levelGamma" step="0.1" class="h-7 text-xs no-spinner" />
+                         </div>
+                    </div>
+                </div>
+
+                <!-- Threshold & Sigmoidal (Advanced) -->
+                <Accordion type="single" collapsible class="w-full border-t">
+                    <AccordionItem value="adv" class="border-0">
+                         <AccordionTrigger class="py-2 text-xs text-muted-foreground">Advanced Color</AccordionTrigger>
+                         <AccordionContent class="space-y-4 pt-2">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <Label class="text-xs">Threshold</Label>
+                                    <span class="text-[10px] font-mono">{{ thresholdPercentage[0] }}%</span>
+                                </div>
+                                <Slider v-model="thresholdPercentage" :max="100" :min="0" :step="1" />
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <Label class="text-xs">Sigmoidal Contrast</Label>
+                                    <span class="text-[10px] font-mono">{{ sigmoidalContrast[0] }}</span>
+                                </div>
+                                <Slider v-model="sigmoidalContrast" :max="20" :min="-20" :step="1" />
+                            </div>
+                         </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="item-4">
-            <AccordionTrigger class="font-semibold text-foreground hover:no-underline">Filters & Effects</AccordionTrigger>
-            <AccordionContent class="accordion-content flex flex-col gap-2">
-              <div class="field">
-                <Label class="text-sm text-muted-foreground">Effect</Label>
-                <Select v-model="effect">
-                  <SelectTrigger class="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="grayscale">Grayscale</SelectItem>
-                    <SelectItem value="sepia">Sepia</SelectItem>
-                    <SelectItem value="charcoal">Charcoal</SelectItem>
-                    <SelectItem value="negate">Invert</SelectItem>
-                    <SelectItem value="cannyEdge">Edge Detect</SelectItem>
-                    <SelectItem value="oilpaint">Oil Paint</SelectItem>
-                    <SelectItem value="solarize">Solarize</SelectItem>
-                    <SelectItem value="bilateralBlur">Bilateral Blur</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div v-if="effect === 'sepia'" class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Sepia Threshold
-                  <span class="text-xs font-medium text-primary">{{ sepiaThreshold[0] }}</span>
-                </Label>
-                <Slider v-model="sepiaThreshold" />
-              </div>
-              <div v-if="effect === 'oilpaint'" class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Oil Paint Radius
-                  <span class="text-xs font-medium text-primary">{{ oilpaintRadius[0] }}</span>
-                </Label>
-                <Slider v-model="oilpaintRadius" :max="15" :step="0.5" />
-              </div>
-              <div v-if="effect === 'solarize'" class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Solarize Factor
-                  <span class="text-xs font-medium text-primary">{{ solarizeFactor[0] }}</span>
-                </Label>
-                <Slider v-model="solarizeFactor" />
-              </div>
-              <div v-if="effect === 'cannyEdge'" class="gap-2">
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                    Strength
-                    <span class="text-xs font-medium text-primary">{{ cannyEdgeStrength[0] }}</span>
-                  </Label>
-                  <Slider v-model="cannyEdgeStrength" />
+          <!-- Filters & Effects -->
+          <AccordionItem value="filters" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
+             <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
+                <div class="flex items-center gap-2">
+                    <span>Filters & Effects</span>
+                    <div v-if="effect !== 'none' || blur[0] > 0 || sharpen[0] > 0" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
                 </div>
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                    Lower Threshold
-                    <span class="text-xs font-medium text-primary">{{ cannyEdgeLower[0] }}%</span>
-                  </Label>
-                  <Slider v-model="cannyEdgeLower" />
+                <Button @click.stop="resetFilters" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Filters">
+                    <RefreshCcw class="w-3 h-3" />
+                </Button>
+            </AccordionTrigger>
+            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
+                <div class="space-y-1.5">
+                    <Label class="text-xs text-muted-foreground">Effect Mode</Label>
+                    <Select v-model="effect">
+                        <SelectTrigger class="h-9">
+                        <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="grayscale">Grayscale</SelectItem>
+                        <SelectItem value="sepia">Sepia</SelectItem>
+                        <SelectItem value="charcoal">Charcoal</SelectItem>
+                        <SelectItem value="negate">Invert</SelectItem>
+                        <SelectItem value="cannyEdge">Edge Detect</SelectItem>
+                        <SelectItem value="oilpaint">Oil Paint</SelectItem>
+                        <SelectItem value="solarize">Solarize</SelectItem>
+                        <SelectItem value="bilateralBlur">Bilateral Blur</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
-                <div class="field">
-                  <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                    Upper Threshold
-                    <span class="text-xs font-medium text-primary">{{ cannyEdgeUpper[0] }}%</span>
-                  </Label>
-                  <Slider v-model="cannyEdgeUpper" />
+
+                <!-- Conditional Effect Controls -->
+                <div v-if="effect !== 'none'" class="p-3 bg-muted/30 rounded-md border space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                     <div v-if="effect === 'sepia'" class="space-y-1.5">
+                        <div class="flex justify-between"><Label class="text-xs">Threshold</Label><span class="text-xs font-mono">{{ sepiaThreshold[0] }}</span></div>
+                        <Slider v-model="sepiaThreshold" />
+                     </div>
+                     <div v-if="effect === 'oilpaint'" class="space-y-1.5">
+                        <div class="flex justify-between"><Label class="text-xs">Radius</Label><span class="text-xs font-mono">{{ oilpaintRadius[0] }}</span></div>
+                        <Slider v-model="oilpaintRadius" :max="15" :step="0.5" />
+                     </div>
+                     <div v-if="effect === 'solarize'" class="space-y-1.5">
+                        <div class="flex justify-between"><Label class="text-xs">Factor</Label><span class="text-xs font-mono">{{ solarizeFactor[0] }}</span></div>
+                        <Slider v-model="solarizeFactor" />
+                     </div>
+                     <div v-if="effect === 'cannyEdge'" class="space-y-3">
+                         <div class="space-y-1.5">
+                            <div class="flex justify-between"><Label class="text-xs">Strength</Label><span class="text-xs font-mono">{{ cannyEdgeStrength[0] }}</span></div>
+                            <Slider v-model="cannyEdgeStrength" />
+                         </div>
+                         <div class="space-y-1.5">
+                            <div class="flex justify-between"><Label class="text-xs">Lower</Label><span class="text-xs font-mono">{{ cannyEdgeLower[0] }}%</span></div>
+                            <Slider v-model="cannyEdgeLower" />
+                         </div>
+                         <div class="space-y-1.5">
+                            <div class="flex justify-between"><Label class="text-xs">Upper</Label><span class="text-xs font-mono">{{ cannyEdgeUpper[0] }}%</span></div>
+                            <Slider v-model="cannyEdgeUpper" />
+                         </div>
+                     </div>
+                     <div v-if="effect === 'bilateralBlur'" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1"><Label class="text-[10px]">Width</Label><Slider v-model="bilateralWidth" :max="10" :step="1" /></div>
+                            <div class="space-y-1"><Label class="text-[10px]">Height</Label><Slider v-model="bilateralHeight" :max="10" :step="1" /></div>
+                        </div>
+                     </div>
                 </div>
-              </div>
-              <div v-if="effect === 'bilateralBlur'" class="gap-2">
-                <div class="field">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                          Bilateral Width
-                          <span class="text-xs font-medium text-primary">{{ bilateralWidth[0] }}</span>
-                        </Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Width of the neighborhood in pixels for bilateral blur (edge-preserving smoothing).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Slider v-model="bilateralWidth" :max="10" :min="0" :step="1" />
+
+                <div class="space-y-3 pt-2 border-t">
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between"><Label class="text-xs text-muted-foreground">Blur</Label><span class="text-xs font-mono text-primary">{{ blur[0] }}</span></div>
+                        <Slider v-model="blur" :max="20" :step="0.5" />
+                    </div>
+                    <div class="space-y-1.5">
+                         <div class="flex justify-between"><Label class="text-xs text-muted-foreground">Sharpen</Label><span class="text-xs font-mono text-primary">{{ sharpen[0] }}</span></div>
+                         <Slider v-model="sharpen" />
+                    </div>
                 </div>
-                <div class="field">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                          Bilateral Height
-                          <span class="text-xs font-medium text-primary">{{ bilateralHeight[0] }}</span>
-                        </Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Height of the neighborhood in pixels for bilateral blur (edge-preserving smoothing).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Slider v-model="bilateralHeight" :max="10" :min="0" :step="1" />
-                </div>
-                <div class="field">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                          Bilateral Intensity Sigma
-                          <span class="text-xs font-medium text-primary">{{ bilateralIntensitySigma[0] }}</span>
-                        </Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Sigma in the intensity space for bilateral blur (controls how edges are preserved).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Slider v-model="bilateralIntensitySigma" :max="5" :min="0.1" :step="0.1" />
-                </div>
-                <div class="field">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2 cursor-help">
-                          Bilateral Spatial Sigma
-                          <span class="text-xs font-medium text-primary">{{ bilateralSpatialSigma[0] }}</span>
-                        </Label>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Sigma in the coordinate space for bilateral blur (controls smoothing extent).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Slider v-model="bilateralSpatialSigma" :max="5" :min="0.1" :step="0.1" />
-                </div>
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Blur
-                  <span class="text-xs font-medium text-primary">{{ blur[0] }}</span>
-                </Label>
-                <Slider v-model="blur" :max="20" :step="0.5" />
-              </div>
-              <div class="field">
-                <Label class="text-sm text-muted-foreground flex items-center justify-between mb-2">
-                  Sharpen
-                  <span class="text-xs font-medium text-primary">{{ sharpen[0] }}</span>
-                </Label>
-                <Slider v-model="sharpen" />
-              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
       </div>
 
-      <div class="sidebar-footer p-4 border-t flex flex-col gap-3">
-        <Button @click="processImage" :disabled="!wasmLoaded || showPlaceholder" class="w-full">Process Image</Button>
-        <Button @click="downloadImage" :disabled="downloadBtnDisabled" variant="secondary" class="w-full">
-          Download
-          <Download class="w-4 h-4 mr-2" />
-        </Button>
-        <div id="stats-bar" class="text-sm text-muted-foreground text-center">
-          {{ statsMessage }}
+      <!-- Footer Actions -->
+      <div class="sidebar-footer p-4 border-t bg-muted/10 space-y-3 shrink-0">
+        <div class="flex gap-2">
+            <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger as-child>
+                <Button @click="processImage" :disabled="!wasmLoaded || showPlaceholder" class="flex-1 font-semibold shadow-sm">Process</Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                <p>Process Image (Ctrl+Enter)</p>
+                </TooltipContent>
+            </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger as-child>
+                <Button @click="downloadImage" :disabled="downloadBtnDisabled" variant="outline" size="icon" class="w-10 shrink-0">
+                    <Download class="w-4 h-4" />
+                </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                <p>Download (Ctrl+S)</p>
+                </TooltipContent>
+            </Tooltip>
+            </TooltipProvider>
+        </div>
+        <div id="stats-bar" class="text-xs text-muted-foreground text-center font-mono whitespace-pre-line leading-tight">
+           {{ statsMessage }}
         </div>
       </div>
     </aside>
@@ -1180,7 +1122,7 @@ async function handleDrop(e) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Zoom Out</p>
+                <p>Zoom Out (Ctrl+-)</p>
               </TooltipContent>
             </Tooltip>
             <span class="zoom-level text-sm font-medium text-foreground w-12 text-center">{{ currentZoom }}%</span>
@@ -1191,17 +1133,17 @@ async function handleDrop(e) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Zoom In</p>
+                <p>Zoom In (Ctrl+=)</p>
               </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button @click="resetView" variant="outline" size="icon" :disabled="showPlaceholder" class="w-8 h-8">
-                  <Fullscreen class="w-4 h-4" />
+                  <Maximize class="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Reset View</p>
+                <p>Reset View (0)</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1209,7 +1151,9 @@ async function handleDrop(e) {
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
-                  @click="isComparing = !isComparing"
+                  @pointerdown.prevent="isComparing = true"
+                  @pointerup.prevent="isComparing = false"
+                  @pointerleave="isComparing = false"
                   :disabled="!processedImageUrl"
                   :variant="isComparing ? 'default' : 'outline'"
                   class="h-8"
@@ -1219,7 +1163,7 @@ async function handleDrop(e) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Compare with Original</p>
+                <p>Press to Compare</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1244,6 +1188,7 @@ async function handleDrop(e) {
           @pointerleave="onPointerUp"
           class="max-w-none max-h-none object-contain will-change-transform transition-[cursor] duration-75 ease-out origin-center"
         />
+        <div v-if="isComparing" class="absolute top-4 left-4 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-md border text-sm font-medium text-foreground shadow-lg z-20">Before</div>
         <div v-if="isLoading" class="loading-overlay absolute inset-0 bg-background/25 backdrop-blur-sm flex justify-center items-center z-10">
           <div class="loading-content flex flex-col items-center gap-3">
             <div class="spinner border-4 border-t-4 border-primary/20 border-t-primary rounded-full w-12 h-12 animate-spin"></div>
@@ -1256,21 +1201,39 @@ async function handleDrop(e) {
 </template>
 
 <style>
+/* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(0.8 0 0); /* Light gray for scrollbar thumb */
-  border-radius: 4px;
+  background: oklch(0.8 0 0);
+  border-radius: 99px;
 }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(0.25 0 0); /* Darker gray for scrollbar thumb in dark mode */
+  background: oklch(0.25 0 0);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.7 0 0);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.35 0 0);
 }
 
-.accordion-content .field:not(:last-of-type) {
-  margin-bottom: 1rem; /* Apply consistent bottom margin to all fields within accordion content, except the last one */
+/* Accordion Animation smoothing */
+.accordion-content {
+    overflow: hidden;
+}
+
+/* Hide Spinners on Input[type=number] */
+input.no-spinner::-webkit-outer-spin-button,
+input.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.no-spinner[type=number] {
+  -moz-appearance: textfield;
 }
 </style>
