@@ -58,7 +58,7 @@ export function useMagick() {
         autoOrient: false,
         levelBlackpoint: [0],
         levelWhitepoint: [100],
-        levelGamma: 1.0,
+        levelGamma: [1.0],
         levelChannels: 'All',
         thresholdPercentage: [50],
         thresholdChannels: 'All',
@@ -146,7 +146,7 @@ export function useMagick() {
         settings.autoOrient = false;
         settings.levelBlackpoint = [0];
         settings.levelWhitepoint = [100];
-        settings.levelGamma = 1.0;
+        settings.levelGamma = [1.0];
         settings.levelChannels = 'All';
         settings.thresholdPercentage = [50];
         settings.thresholdChannels = 'All';
@@ -170,6 +170,12 @@ export function useMagick() {
         settings.bilateralHeight = [0];
         settings.bilateralIntensitySigma = [1.5];
         settings.bilateralSpatialSigma = [1];
+    }
+
+    function resetExport() {
+        settings.imageFormat = 'WebP';
+        settings.quality = [85];
+        settings.stripMeta = true;
     }
 
     function resetSettings() {
@@ -280,10 +286,10 @@ export function useMagick() {
                         image.autoOrient();
                         appliedOptions.autoOrient = true;
                     }
-                    if (settings.levelBlackpoint[0] !== 0 || settings.levelWhitepoint[0] !== 100 || settings.levelGamma !== 1.0) {
+                    if (settings.levelBlackpoint[0] !== 0 || settings.levelWhitepoint[0] !== 100 || settings.levelGamma[0] !== 1.0) {
                         const channels = settings.levelChannels === 'All' ? Channels.All : Channels[settings.levelChannels];
-                        image.level(new Percentage(settings.levelBlackpoint[0]), new Percentage(settings.levelWhitepoint[0]), settings.levelGamma, channels);
-                        appliedOptions.level = { black: settings.levelBlackpoint[0], white: settings.levelWhitepoint[0], gamma: settings.levelGamma, channels: settings.levelChannels };
+                        image.level(new Percentage(settings.levelBlackpoint[0]), new Percentage(settings.levelWhitepoint[0]), settings.levelGamma[0], channels);
+                        appliedOptions.level = { black: settings.levelBlackpoint[0], white: settings.levelWhitepoint[0], gamma: settings.levelGamma[0], channels: settings.levelChannels };
                     }
                     if (settings.thresholdPercentage[0] !== 50) {
                         const selectedThresholdChannels = settings.thresholdChannels === 'All' ? Channels.All : Channels[settings.thresholdChannels];
@@ -386,7 +392,7 @@ export function useMagick() {
 
         const newSizeKB = (blob.size / 1024).toFixed(1);
         const percentageChange = (((blob.size - originalImageSize.value) / originalImageSize.value) * 100).toFixed(1);
-        statsMessage.value = `Processed in ${time}ms\nNew Size: ${newSizeKB} KB (${percentageChange > 0 ? '+' : ''}${percentageChange}%)`;
+        statsMessage.value = `Processed in ${time}ms, New Size: ${newSizeKB} KB (${percentageChange > 0 ? '+' : ''}${percentageChange}%)`;
     }
 
     function downloadImage() {
@@ -418,6 +424,7 @@ export function useMagick() {
         resetGeometry,
         resetColor,
         resetFilters,
+        resetExport,
         setSourceFile,
         clearSource,
         processImage,

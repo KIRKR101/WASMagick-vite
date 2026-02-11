@@ -34,7 +34,7 @@ function handleKeydown(e) {
     } else if (cmdOrCtrl && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         magick.downloadImage();
-    } else if (e.key === '0') {
+    } else if (cmdOrCtrl && e.key === '0') {
         e.preventDefault();
         if(viewportRef.value) viewportRef.value.resetView();
     } else if (cmdOrCtrl && e.key === '=') {
@@ -88,7 +88,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-layout min-h-screen grid grid-cols-[360px_1fr] dark:bg-zinc-950">
+  <div class="app-layout min-h-screen grid grid-cols-[400px_1fr] dark:bg-zinc-950">
     <!-- Global drag and drop overlay -->
     <div v-if="globalDragging" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div class="text-center">
@@ -103,7 +103,7 @@ onMounted(async () => {
       :is-dark-mode="isDarkMode"
       @toggle-debug="debugMode = !debugMode" 
       @toggle-theme="toggleDarkMode"
-      @file-changed="() => viewportRef && setTimeout(() => viewportRef.fitImageToScreen(), 100)"
+      @file-changed="() => { if(viewportRef.value) setTimeout(() => viewportRef.value.fitImageToScreen(), 100); }"
     />
 
     <ImageViewport 

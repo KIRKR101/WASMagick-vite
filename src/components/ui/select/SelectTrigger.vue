@@ -22,14 +22,14 @@ const forwardedProps = useForwardProps(delegatedProps);
     v-bind="forwardedProps"
     :class="
       cn(
-        'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:truncate text-start cursor-pointer',
+        'flex h-8 w-full items-center justify-between whitespace-nowrap rounded-xs border border-border bg-transparent px-2.5 py-1 text-xs transition-all duration-50 data-[placeholder]:text-muted-foreground/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-40 [&>span]:truncate text-start cursor-pointer',
         props.class,
       )
     "
   >
     <slot />
     <SelectIcon as-child>
-      <ChevronDown class="w-4 h-4 opacity-50 shrink-0" />
+      <ChevronDown class="w-3.5 h-3.5 opacity-40 shrink-0" />
     </SelectIcon>
   </SelectTrigger>
 </template>

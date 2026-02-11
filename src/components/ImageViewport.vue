@@ -204,7 +204,7 @@ defineExpose({
         <div v-if="isLoading" class="loading-overlay absolute inset-0 bg-background/25 backdrop-blur-sm flex justify-center items-center z-10">
           <div class="loading-content flex flex-col items-center gap-3">
             <div class="spinner border-4 border-t-4 border-primary/20 border-t-primary rounded-full w-12 h-12 animate-spin"></div>
-            <span class="text-foreground text-lg font-medium">Processing...</span>
+            <span class="text-foreground text-sm font-medium">Processing...</span>
           </div>
         </div>
       </div>

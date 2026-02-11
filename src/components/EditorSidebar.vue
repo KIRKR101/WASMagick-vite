@@ -8,7 +8,11 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { UploadCloud, X, Moon, Sun, Bug, Download, RotateCw, RefreshCcw } from 'lucide-vue-next';
+import { 
+  Moon, Sun, Bug, Download, RotateCw, 
+  RefreshCcw, FileImage, Settings2, 
+  Palette, Wand2, Maximize, Trash2,
+} from 'lucide-vue-next';
 
 const props = defineProps({
   magick: { type: Object, required: true },
@@ -45,330 +49,378 @@ async function handleFileChange(e) {
         }
     }
 }
+
+// Helper to format file size
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 </script>
 
 <template>
-    <aside class="sidebar bg-background flex flex-col border-r shadow-lg h-screen z-10">
-      <header class="brand flex items-center justify-between gap-2 px-4 py-3 border-b h-14 shrink-0">
+    <aside class="sidebar flex flex-col border-r h-screen z-10 select-none">
+      <!-- Header -->
+      <header class="flex items-center justify-between px-4 py-3 border-b h-14 shrink-0">
         <div class="flex items-center gap-2">
-            <h1 class="text-lg font-bold tracking-tight text-foreground">WASMagick</h1>
+            <div class="w-6 h-6 bg-primary rounded flex items-center justify-center">
+                <Settings2 class="w-4 h-4 text-primary-foreground" />
+            </div>
+            <h1 class="text-sm font-semibold tracking-tight text-foreground uppercase">WASMagick</h1>
         </div>
 
         <div class="flex items-center gap-1">
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger as-child>
-                        <Button @click="$emit('toggle-debug')" :variant="debugMode ? 'secondary' : 'ghost'" size="icon" class="w-8 h-8">
+                        <Button @click="$emit('toggle-debug')" :variant="debugMode ? 'secondary' : 'ghost'" size="sm" class="h-8 w-8 p-0 cursor-pointer rounded-xs">
                             <Bug class="w-4 h-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Toggle Debug Mode</p>
-                    </TooltipContent>
+                    <TooltipContent>Toggle Debug Mode</TooltipContent>
                 </Tooltip>
             </TooltipProvider>
 
-            <Button @click="$emit('toggle-theme')" variant="ghost" size="icon" class="w-8 h-8">
-                <Sun class="w-4 h-4 dark:hidden" />
-                <Moon class="w-4 h-4 hidden dark:block" />
-            </Button>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger as-child>
+                        <Button @click="$emit('toggle-theme')" variant="ghost" size="sm" class="h-8 w-8 p-0 cursor-pointer rounded-xs">
+                            <Sun class="w-4 h-4 dark:hidden" />
+                            <Moon class="w-4 h-4 hidden dark:block" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Toggle Theme</TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
         </div>
       </header>
 
-      <div class="scroll-container flex-grow overflow-y-auto px-4 py-6 custom-scrollbar space-y-6">
+       <div class="scroll-container flex-grow overflow-y-auto custom-scrollbar">
         
-        <!-- File Input Section -->
-        <div class="section-upload">
+        <!-- File Section -->
+        <div class="p-4 space-y-3 border-b">
           <div v-if="!magick.originalImageUrl.value">
             <Label
               for="fileInput"
-              class="drop-zone flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200"
-              :class="{ 'border-primary bg-primary/5': isDragging, 'border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/30': !isDragging }"
+              class="drop-zone relative flex flex-col items-center justify-center gap-2 px-4 py-8 border-2 border-dashed rounded-xs cursor-pointer transition-all duration-50 group"
+              :class="{ 'border-primary bg-primary/10': isDragging, 'border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50': !isDragging }"
               @dragover.prevent="handleDragOver"
               @dragleave="handleDragLeave"
               @drop.prevent="handleDrop"
             >
-              <UploadCloud class="w-10 h-10 mb-3 text-muted-foreground" />
-              <p class="text-sm font-medium text-foreground">Click or Drop Image</p>
-              <p class="text-xs text-muted-foreground mt-1">Supports common formats</p>
+              <FileImage class="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors duration-50" />
+              <div class="text-center">
+                <p class="text-xs font-medium text-foreground">Drop image here or click to browse</p>
+                <p class="text-[11px] text-muted-foreground mt-1">Supports any common format</p>
+              </div>
               <Input type="file" id="fileInput" accept="image/*" @change="handleFileChange" class="hidden" />
             </Label>
           </div>
-          <div v-else class="file-preview relative group flex items-start gap-3 p-3 bg-muted/30 border rounded-lg shadow-sm">
-            <div class="w-16 h-16 shrink-0 bg-background rounded-md border overflow-hidden flex items-center justify-center">
-                <img :src="magick.originalImageUrl.value" class="w-full h-full object-cover" />
+
+          <div v-else class="space-y-2">
+            <div class="group flex items-center gap-3 p-2.5 rounded-xs bg-background border border-border hover:border-muted-foreground/30 transition-all duration-50 shadow-sm">
+              <div class="w-12 h-12 shrink-0 bg-muted rounded-md overflow-hidden flex items-center justify-center border border-border/50">
+                  <img :src="magick.originalImageUrl.value" class="w-full h-full object-cover" alt="Source" />
+              </div>
+              <div class="flex-1 min-w-0">
+                  <p class="text-[11px] font-semibold truncate text-foreground">{{ magick.originalName.value }}</p>
+                  <p class="text-[11px] text-muted-foreground">{{ formatFileSize(magick.originalImageSize.value) }}</p>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                     <Button @click="magick.clearSource()" variant="ghost" size="icon" class="h-8 w-8 hover:text-destructive hover:bg-destructive/10 transition-all duration-50">
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Remove Image</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
-            <div class="flex-1 min-w-0 flex flex-col justify-center h-16">
-                <span class="text-sm font-medium text-foreground truncate block">{{ magick.originalName.value }}</span>
-                <span class="text-xs text-muted-foreground">{{ (magick.originalImageSize.value / 1024).toFixed(1) }} KB</span>
-            </div>
-            <Button @click="magick.clearSource()" variant="ghost" size="icon" class="w-6 h-6 absolute top-2 right-2 text-muted-foreground hover:text-destructive">
-              <X class="w-4 h-4" />
+
+            <Button @click="magick.resetSettings()" variant="outline" size="sm" class="w-full text-[11px] h-8 gap-1.5 uppercase tracking-wider font-semibold hover:bg-muted transition-colors duration-50">
+              <RotateCw class="w-3 h-3" />
+              Reset All Settings
             </Button>
           </div>
         </div>
 
-        <Button @click="magick.resetSettings()" variant="secondary" size="sm" class="w-full text-muted-foreground hover:text-foreground">
-          <RotateCw class="w-3.5 h-3.5 mr-2" />
-          Reset All Settings
-        </Button>
-
         <!-- Tools Accordion -->
-        <Accordion class="accordion-wrapper w-full" type="multiple" collapsible>
-          
-          <!-- Export Settings -->
-          <AccordionItem value="export" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
-            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors">Export Settings</AccordionTrigger>
-            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
+        <Accordion class="w-full" type="multiple" :default-value="['export', 'geometry']">
+
+          <!-- Export Section -->
+          <AccordionItem value="export" class="border-b px-4">
+            <AccordionTrigger class="hover:no-underline py-3.5 group cursor-pointer">
+              <div class="flex items-center gap-2.5">
+                  <Download class="w-4 h-4 text-primary" />
+                  <span class="text-xs font-bold uppercase tracking-wider">Export</span>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button @click.stop="magick.resetExport()" variant="ghost" size="icon" class="h-6 w-6 ml-auto mr-2 opacity-0 group-hover:opacity-100 transition-opacity duration-50">
+                      <RefreshCcw class="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Reset Export Settings</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </AccordionTrigger>
+            <AccordionContent class="pb-4 space-y-4">
               <div class="grid grid-cols-2 gap-3">
-                  <div class="space-y-1.5">
-                    <Label class="text-xs text-muted-foreground">Format</Label>
+                  <div class="space-y-2">
+                    <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Format</Label>
                     <Select v-model="magick.settings.imageFormat">
-                      <SelectTrigger class="h-9">
+                      <SelectTrigger class="h-9 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Jpeg">JPEG</SelectItem>
-                        <SelectItem value="Png">PNG</SelectItem>
-                        <SelectItem value="WebP">WebP</SelectItem>
-                        <SelectItem value="Avif">AVIF</SelectItem>
-                        <SelectItem value="Jxl">JXL</SelectItem>
-                        <SelectItem value="Tiff">TIFF</SelectItem>
-                        <SelectItem value="Gif">GIF</SelectItem>
+                        <SelectItem v-for="fmt in ['WebP', 'Jpeg', 'Png', 'Avif', 'Jxl', 'Tiff', 'Gif']" :key="fmt" :value="fmt">{{ fmt }}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div class="space-y-1.5">
+                  <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                        <Label class="text-xs text-muted-foreground">Quality</Label>
-                        <span class="text-xs font-mono text-primary">{{ magick.settings.quality[0] }}</span>
+                        <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Quality</Label>
+                        <span class="text-[11px] font-mono font-bold text-foreground">{{ magick.settings.quality[0] }}%</span>
                     </div>
-                    <div class="h-9 flex items-center">
-                        <Slider v-model="magick.settings.quality" :max="100" :min="1" :step="1" />
-                    </div>
+                    <Slider v-model="magick.settings.quality" :max="100" :min="1" :step="1" class="py-2" />
                   </div>
               </div>
-              
-              <div class="flex items-center justify-between bg-muted/30 p-2 rounded-md border">
-                <Label for="stripMeta" class="text-xs font-medium cursor-pointer">Strip EXIF Data</Label>
-                <Switch id="stripMeta" v-model="magick.settings.stripMeta" class="scale-75 origin-right" />
-              </div>
+
+              <label for="stripMeta" class="flex items-center justify-between p-3 rounded-sm bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors duration-50 cursor-pointer">
+                <span class="text-[11px] font-medium">Strip Metadata (EXIF)</span>
+                <Switch id="stripMeta" v-model="magick.settings.stripMeta" class="pointer-events-none" />
+              </label>
             </AccordionContent>
           </AccordionItem>
 
-          <!-- Geometry -->
-          <AccordionItem value="geometry" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
-            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
-              <div class="flex items-center gap-2">
-                  <span>Geometry</span>
-                  <div v-if="magick.settings.resizeW || magick.settings.resizeH || magick.settings.rotate !== '0'" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+          <!-- Geometry Section -->
+          <AccordionItem value="geometry" class="border-b px-4">
+            <AccordionTrigger class="hover:no-underline py-3.5 group cursor-pointer">
+              <div class="flex items-center gap-2.5">
+                  <Maximize class="w-4 h-4 text-primary" />
+                  <span class="text-xs font-bold uppercase tracking-wider">Geometry</span>
+                  <div v-if="magick.settings.resizeW || magick.settings.resizeH || magick.settings.rotate !== '0' || magick.settings.flip || magick.settings.flop" class="w-1.5 h-1.5 rounded-full bg-primary" />
               </div>
-              <Button @click.stop="magick.resetGeometry()" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Geometry">
-                <RefreshCcw class="w-3 h-3" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button @click.stop="magick.resetGeometry()" variant="ghost" size="icon" class="h-6 w-6 ml-auto mr-2 opacity-0 group-hover:opacity-100 transition-opacity duration-50">
+                      <RefreshCcw class="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Reset Geometry</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </AccordionTrigger>
-            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
+            <AccordionContent class="pb-4 space-y-5">
+              
               <!-- Resize -->
-              <div class="grid grid-cols-2 gap-3">
-                <div class="space-y-1.5">
-                  <Label class="text-xs text-muted-foreground">Width (px)</Label>
-                  <Input type="number" v-model="magick.settings.resizeW" min="0" placeholder="Auto" class="h-8 text-sm no-spinner" />
-                </div>
-                <div class="space-y-1.5">
-                  <Label class="text-xs text-muted-foreground">Height (px)</Label>
-                  <Input type="number" v-model="magick.settings.resizeH" min="0" placeholder="Auto" class="h-8 text-sm no-spinner" />
+              <div class="space-y-2">
+                <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide flex items-center gap-1.5">
+                    Resize (pixels)
+                </Label>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">W</span>
+                        <Input type="number" v-model="magick.settings.resizeW" placeholder="Auto" class="h-9 pl-8 text-xs font-mono" />
+                    </div>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">H</span>
+                        <Input type="number" v-model="magick.settings.resizeH" placeholder="Auto" class="h-9 pl-8 text-xs font-mono" />
+                    </div>
                 </div>
               </div>
 
-              <!-- Rotate & Flip -->
-              <div class="grid grid-cols-2 gap-3 items-end">
-                <div class="space-y-1.5">
-                    <Label class="text-xs text-muted-foreground">Rotate</Label>
+              <!-- Rotation & Transform -->
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-2">
+                    <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Rotate</Label>
                     <Select v-model="magick.settings.rotate">
-                    <SelectTrigger class="h-8 text-sm">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="0">0°</SelectItem>
-                        <SelectItem value="90">90°</SelectItem>
-                        <SelectItem value="180">180°</SelectItem>
-                        <SelectItem value="-90">-90°</SelectItem>
-                    </SelectContent>
+                        <SelectTrigger class="h-9 text-xs">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="0">0° (None)</SelectItem>
+                            <SelectItem value="90">90° CW</SelectItem>
+                            <SelectItem value="180">180°</SelectItem>
+                            <SelectItem value="-90">270° CCW</SelectItem>
+                        </SelectContent>
                     </Select>
                 </div>
-                <div class="flex items-center justify-around h-8 bg-muted/30 rounded-md border">
-                    <div class="flex items-center gap-1.5" title="Flop (Horizontal Mirror)">
-                        <Switch id="flop" v-model="magick.settings.flop" class="scale-75" />
-                        <Label for="flop" class="text-xs cursor-pointer">Flop</Label>
-                    </div>
-                    <div class="w-px h-4 bg-border"></div>
-                    <div class="flex items-center gap-1.5" title="Flip (Vertical Mirror)">
-                        <Switch id="flip" v-model="magick.settings.flip" class="scale-75" />
-                        <Label for="flip" class="text-xs cursor-pointer">Flip</Label>
+                <div class="space-y-2">
+                    <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Transform</Label>
+                    <div class="grid grid-cols-2 gap-1.5 h-9">
+                        <label for="flip" class="flex items-center justify-center gap-1.5 bg-muted/40 rounded-xs border border-border/50 hover:bg-muted/60 transition-colors duration-50 px-2 cursor-pointer">
+                            <Switch id="flip" v-model="magick.settings.flip" class="pointer-events-none" />
+                            <span class="text-[11px] font-semibold">Flip</span>
+                        </label>
+                        <label for="flop" class="flex items-center justify-center gap-1.5 bg-muted/40 rounded-xs border border-border/50 hover:bg-muted/60 transition-colors duration-50 px-2 cursor-pointer">
+                            <Switch id="flop" v-model="magick.settings.flop" class="pointer-events-none" />
+                            <span class="text-[11px] font-semibold">Flop</span>
+                        </label>
                     </div>
                 </div>
               </div>
 
-              <!-- Border -->
-              <div class="space-y-3 pt-2 border-t">
-                  <Label class="text-xs font-semibold text-foreground/80">Border</Label>
-                  <div class="flex gap-3">
-                      <div class="flex-1 space-y-1.5">
-                         <div class="flex justify-between">
-                             <Label class="text-xs text-muted-foreground">Size</Label>
-                             <span class="text-xs font-mono text-muted-foreground">{{ magick.settings.borderSize[0] }}px</span>
-                         </div>
-                         <Slider v-model="magick.settings.borderSize" :max="50" :min="0" :step="1" />
-                      </div>
-                      <div class="w-12 space-y-1.5">
-                          <Label class="text-xs text-muted-foreground">Color</Label>
-                          <div class="h-8 w-full rounded-md border overflow-hidden p-0.5 relative">
-                              <input type="color" v-model="magick.settings.borderColor" class="absolute inset-0 w-[150%] h-[150%] -top-1/4 -left-1/4 p-0 border-0 cursor-pointer" />
-                          </div>
-                      </div>
-                  </div>
-              </div>
+              <!-- Auto Orient -->
+              <label for="autoOrient" class="flex items-center justify-between p-3 rounded-sm bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors duration-50 cursor-pointer">
+                <span class="text-[11px] font-medium">Auto Orient (from EXIF)</span>
+                <Switch id="autoOrient" v-model="magick.settings.autoOrient" class="pointer-events-none" />
+              </label>
 
-              <!-- Extent -->
-              <div class="space-y-3 pt-2 border-t">
-                <Label class="text-xs font-semibold text-foreground/80">Extent (Canvas)</Label>
-                <div class="grid grid-cols-2 gap-3">
-                    <Input type="number" v-model="magick.settings.extentW" min="0" placeholder="W" class="h-8 text-sm no-spinner" />
-                    <Input type="number" v-model="magick.settings.extentH" min="0" placeholder="H" class="h-8 text-sm no-spinner" />
-                </div>
-                <div class="grid grid-cols-[1fr_3rem] gap-3">
-                     <Select v-model="magick.settings.extentGravity">
-                        <SelectTrigger class="h-8 text-sm">
-                            <SelectValue />
+               <!-- Deskew -->
+               <div class="space-y-2 p-3 rounded-sm bg-muted/20 border border-border/40">
+                    <div class="flex items-center justify-between">
+                         <span class="text-[11px] uppercase font-semibold text-muted-foreground tracking-wide">Deskew</span>
+                         <label for="deskewAutoCrop" class="flex items-center gap-2 cursor-pointer">
+                            <span class="text-[11px] text-muted-foreground">Auto Crop</span>
+                            <Switch id="deskewAutoCrop" v-model="magick.settings.deskewAutoCrop" class="scale-75 pointer-events-none" />
+                         </label>
+                    </div>
+                    <div class="flex items-center gap-3">
+                         <Slider v-model="magick.settings.deskewThreshold" :max="100" :min="0" :step="1" class="flex-1" />
+                         <span class="text-[11px] font-mono font-bold w-10 text-right">{{ magick.settings.deskewThreshold[0] }}%</span>
+                    </div>
+               </div>
+
+              <!-- Canvas Extent -->
+              <div class="space-y-2 pt-2 border-t border-dashed border-border/60">
+                 <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide flex items-center gap-1.5">
+                    Canvas Extent
+                 </Label>
+                 <div class="grid grid-cols-2 gap-2">
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">W</span>
+                        <Input type="number" v-model="magick.settings.extentW" placeholder="Auto" class="h-9 pl-8 text-xs font-mono" />
+                    </div>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">H</span>
+                        <Input type="number" v-model="magick.settings.extentH" placeholder="Auto" class="h-9 pl-8 text-xs font-mono" />
+                    </div>
+                 </div>
+                 <div class="grid grid-cols-[1fr_auto] gap-2">
+                    <Select v-model="magick.settings.extentGravity">
+                        <SelectTrigger class="h-9 text-xs">
+                            <SelectValue placeholder="Gravity" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="Center">Center</SelectItem>
                             <SelectItem value="NorthWest">Top Left</SelectItem>
-                            <SelectItem value="North">Top</SelectItem>
+                            <SelectItem value="North">Top Center</SelectItem>
                             <SelectItem value="NorthEast">Top Right</SelectItem>
                             <SelectItem value="West">Left</SelectItem>
                             <SelectItem value="East">Right</SelectItem>
-                            <SelectItem value="SouthWest">Bot Left</SelectItem>
-                            <SelectItem value="South">Bottom</SelectItem>
-                            <SelectItem value="SouthEast">Bot Right</SelectItem>
+                            <SelectItem value="SouthWest">Bottom Left</SelectItem>
+                            <SelectItem value="South">Bottom Center</SelectItem>
+                            <SelectItem value="SouthEast">Bottom Right</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div class="h-8 rounded-md border overflow-hidden relative">
-                         <input type="color" v-model="magick.settings.extentBgColor" class="absolute inset-0 w-[150%] h-[150%] -top-1/4 -left-1/4 p-0 border-0 cursor-pointer" />
+                    <div class="relative w-12 h-9 border border-border rounded-sm overflow-hidden shadow-sm hover:ring-2 hover:ring-primary/50 transition-all duration-50">
+                        <input type="color" v-model="magick.settings.extentBgColor" class="absolute inset-0 w-[200%] h-[200%] -top-1/2 -left-1/2 p-0 border-0 cursor-pointer" title="Background Color" />
                     </div>
-                </div>
+                 </div>
               </div>
 
-              <!-- Deskew -->
-               <div class="space-y-3 pt-2 border-t">
-                 <div class="flex items-center justify-between">
-                     <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger as-child>
-                                <Label class="text-xs font-semibold text-foreground/80 cursor-help underline decoration-dotted">Deskew</Label>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Auto-straighten scanned documents</p></TooltipContent>
-                        </Tooltip>
-                     </TooltipProvider>
-                     <div class="flex items-center gap-2">
-                         <Label for="deskewAuto" class="text-[10px] text-muted-foreground">Auto Crop</Label>
-                         <Switch id="deskewAuto" v-model="magick.settings.deskewAutoCrop" class="scale-75" />
-                     </div>
-                 </div>
-                 <div class="space-y-1.5">
-                     <div class="flex justify-between">
-                        <Label class="text-xs text-muted-foreground">Threshold</Label>
-                        <span class="text-xs font-mono text-muted-foreground">{{ magick.settings.deskewThreshold[0] }}%</span>
-                     </div>
-                     <Slider v-model="magick.settings.deskewThreshold" :max="100" :min="0" :step="1" />
-                 </div>
-               </div>
+              <!-- Border -->
+              <div class="space-y-2 p-3 rounded-sm bg-muted/20 border border-border/40">
+                  <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Border</Label>
+                  <div class="flex items-center gap-3">
+                      <div class="flex-1 space-y-1.5">
+                         <div class="flex justify-between">
+                             <span class="text-[11px] text-muted-foreground">Size</span>
+                             <span class="text-[11px] font-mono font-bold">{{ magick.settings.borderSize[0] }}px</span>
+                         </div>
+                         <Slider v-model="magick.settings.borderSize" :max="50" :min="0" :step="1" />
+                      </div>
+                      <div class="relative w-12 h-9 border border-border rounded-sm overflow-hidden shadow-sm hover:ring-2 hover:ring-primary/50 transition-all duration-50">
+                          <input type="color" v-model="magick.settings.borderColor" class="absolute inset-0 w-[200%] h-[200%] -top-1/2 -left-1/2 p-0 border-0 cursor-pointer" title="Border Color" />
+                      </div>
+                  </div>
+              </div>
             </AccordionContent>
           </AccordionItem>
 
-          <!-- Color Adjust -->
-          <AccordionItem value="color" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
-            <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
-                <div class="flex items-center gap-2">
-                    <span>Color Adjust</span>
-                    <div v-if="magick.settings.brightness[0] !== 100 || magick.settings.contrast[0] !== 0 || magick.settings.saturation[0] !== 100" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+          <!-- Color Section -->
+          <AccordionItem value="color" class="border-b px-4">
+            <AccordionTrigger class="hover:no-underline py-3.5 group cursor-pointer">
+                <div class="flex items-center gap-2.5">
+                    <Palette class="w-4 h-4 text-primary" />
+                    <span class="text-xs font-bold uppercase tracking-wider">Color</span>
+                    <div v-if="magick.settings.normalizeImage || magick.settings.autoLevel || magick.settings.brightness[0] !== 100 || magick.settings.contrast[0] !== 0 || magick.settings.saturation[0] !== 100 || magick.settings.hue[0] !== 100" class="w-1.5 h-1.5 rounded-full bg-primary" />
                 </div>
-                <Button @click.stop="magick.resetColor()" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Colors">
-                    <RefreshCcw class="w-3 h-3" />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button @click.stop="magick.resetColor()" variant="ghost" size="icon" class="h-6 w-6 ml-auto mr-2 opacity-0 group-hover:opacity-100 transition-opacity duration-50">
+                          <RefreshCcw class="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">Reset Color Settings</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
             </AccordionTrigger>
-            <AccordionContent class="px-3 pb-4 pt-1 space-y-5">
-                <!-- Main Sliders -->
+            <AccordionContent class="pb-4 space-y-5">
+                <!-- Basic Adjustments -->
                 <div class="space-y-4">
-                    <div class="space-y-2">
+                    <div v-for="attr in [
+                      { key: 'brightness', label: 'Brightness', unit: '%', min: 0, max: 200 },
+                      { key: 'contrast', label: 'Contrast', unit: '', min: -100, max: 100 },
+                      { key: 'saturation', label: 'Saturation', unit: '%', min: 0, max: 300 },
+                      { key: 'hue', label: 'Hue', unit: '%', min: 0, max: 200 }
+                    ]" :key="attr.key" class="space-y-1.5">
                         <div class="flex items-center justify-between">
-                            <Label class="text-xs text-muted-foreground">Brightness</Label>
-                            <span class="text-xs font-mono text-primary">{{ magick.settings.brightness[0] }}%</span>
+                            <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">{{ attr.label }}</Label>
+                            <span class="text-[11px] font-mono font-bold">{{ magick.settings[attr.key][0] }}{{ attr.unit }}</span>
                         </div>
-                        <Slider v-model="magick.settings.brightness" :min="0" :max="200" />
-                    </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <Label class="text-xs text-muted-foreground">Contrast</Label>
-                            <span class="text-xs font-mono text-primary">{{ magick.settings.contrast[0] }}</span>
-                        </div>
-                        <Slider v-model="magick.settings.contrast" :min="-100" :max="100" />
-                    </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <Label class="text-xs text-muted-foreground">Saturation</Label>
-                            <span class="text-xs font-mono text-primary">{{ magick.settings.saturation[0] }}%</span>
-                        </div>
-                        <Slider v-model="magick.settings.saturation" :min="0" :max="300" />
-                    </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <Label class="text-xs text-muted-foreground">Hue</Label>
-                            <span class="text-xs font-mono text-primary">{{ magick.settings.hue[0] }}%</span>
-                        </div>
-                        <Slider v-model="magick.settings.hue" :min="0" :max="200" />
+                        <Slider v-model="magick.settings[attr.key]" :min="attr.min" :max="attr.max" :step="1" />
                     </div>
                 </div>
 
-                <div class="space-y-1.5 pt-2 border-t">
-                    <Label class="text-xs text-muted-foreground">Color Space</Label>
-                    <Select v-model="magick.settings.colorSpace">
-                        <SelectTrigger class="h-8 text-sm">
-                            <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="RGB">RGB</SelectItem>
-                            <SelectItem value="Gray">Gray</SelectItem>
-                            <SelectItem value="CMYK">CMYK</SelectItem>
-                            <SelectItem value="HSL">HSL</SelectItem>
-                            <SelectItem value="HSV">HSV</SelectItem>
-                            <SelectItem value="LAB">LAB</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <!-- Color Space & Toggles -->
+                <div class="space-y-3 pt-3 border-t border-dashed border-border/60">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-2">
+                             <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Color Space</Label>
+                             <Select v-model="magick.settings.colorSpace">
+                                <SelectTrigger class="h-9 text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="RGB">RGB</SelectItem>
+                                    <SelectItem value="Gray">Grayscale</SelectItem>
+                                    <SelectItem value="CMYK">CMYK</SelectItem>
+                                    <SelectItem value="HSL">HSL</SelectItem>
+                                    <SelectItem value="HSV">HSV</SelectItem>
+                                    <SelectItem value="LAB">LAB</SelectItem>
+                                </SelectContent>
+                             </Select>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2">
+                          <div class="flex items-end">
+                             <label for="normalize" class="flex items-center justify-between px-2.5 h-9 rounded-xs bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors duration-50 w-full cursor-pointer">
+                                <span class="text-[11px] font-medium">Normalize</span>
+                                <Switch id="normalize" v-model="magick.settings.normalizeImage" class="scale-75 pointer-events-none" />
+                            </label>
+                          </div>
+                        </div>
+                    </div>
 
-                <!-- Auto Toggles -->
-                <div class="grid grid-cols-1 gap-2 pt-2 border-t">
-                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                        <Label class="text-xs cursor-pointer" for="normalize">Normalize</Label>
-                        <Switch id="normalize" v-model="magick.settings.normalizeImage" class="scale-75" />
-                     </div>
-                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                        <Label class="text-xs cursor-pointer" for="autoLevel">Auto Level</Label>
-                        <Switch id="autoLevel" v-model="magick.settings.autoLevel" class="scale-75" />
-                     </div>
-                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                        <Label class="text-xs cursor-pointer" for="autoOrient">Auto Orient</Label>
-                        <Switch id="autoOrient" v-model="magick.settings.autoOrient" class="scale-75" />
-                     </div>
+                    <label for="autoLevel" class="flex items-center justify-between px-2.5 py-2 rounded-xs bg-muted/40 border border-border/50 hover:bg-muted/60 transition-colors duration-50 cursor-pointer">
+                        <span class="text-[11px] font-medium">Auto Level</span>
+                        <Switch id="autoLevel" v-model="magick.settings.autoLevel" class="scale-75 pointer-events-none" />
+                    </label>
                 </div>
 
                 <!-- Levels -->
-                <div class="space-y-3 pt-2 border-t">
-                    <div class="flex items-center justify-between mb-2">
-                        <Label class="text-xs font-semibold text-foreground/80">Levels</Label>
+                <div class="space-y-3 pt-3 border-t border-dashed border-border/60">
+                     <div class="flex items-center justify-between">
+                        <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide flex items-center gap-1.5">
+                             Levels
+                        </Label>
                         <Select v-model="magick.settings.levelChannels">
-                            <SelectTrigger class="h-6 w-20 text-[10px] px-2">
+                            <SelectTrigger class="h-7 w-20 text-[11px] px-2">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -381,36 +433,45 @@ async function handleFileChange(e) {
                     </div>
                     <div class="space-y-3">
                          <div class="space-y-1.5">
-                             <div class="flex justify-between"><Label class="text-[10px] text-muted-foreground">Black Point</Label><span class="text-[10px] font-mono">{{ magick.settings.levelBlackpoint[0] }}</span></div>
+                             <div class="flex justify-between">
+                                <span class="text-[11px] text-muted-foreground">Black Point</span>
+                                <span class="text-[11px] font-mono font-bold">{{ magick.settings.levelBlackpoint[0] }}</span>
+                             </div>
                              <Slider v-model="magick.settings.levelBlackpoint" :max="100" :min="0" :step="1" />
                          </div>
                          <div class="space-y-1.5">
-                             <div class="flex justify-between"><Label class="text-[10px] text-muted-foreground">White Point</Label><span class="text-[10px] font-mono">{{ magick.settings.levelWhitepoint[0] }}</span></div>
+                             <div class="flex justify-between">
+                                <span class="text-[11px] text-muted-foreground">White Point</span>
+                                <span class="text-[11px] font-mono font-bold">{{ magick.settings.levelWhitepoint[0] }}</span>
+                             </div>
                              <Slider v-model="magick.settings.levelWhitepoint" :max="100" :min="0" :step="1" />
                          </div>
                          <div class="space-y-1.5">
-                            <Label class="text-[10px] text-muted-foreground">Gamma</Label>
-                            <Input type="number" v-model="magick.settings.levelGamma" step="0.1" class="h-7 text-xs no-spinner" />
+                             <div class="flex justify-between">
+                                <span class="text-[11px] text-muted-foreground">Gamma</span>
+                                <span class="text-[11px] font-mono font-bold">{{ magick.settings.levelGamma[0].toFixed(1) }}</span>
+                             </div>
+                             <Slider v-model="magick.settings.levelGamma" :max="3" :min="0.1" :step="0.1" />
                          </div>
                     </div>
                 </div>
 
-                <!-- Threshold & Sigmoidal (Advanced) -->
-                <Accordion type="single" collapsible class="w-full border-t">
+                <!-- Advanced -->
+                <Accordion type="single" collapsible class="w-full border-t border-dashed border-border/60">
                     <AccordionItem value="adv" class="border-0">
-                         <AccordionTrigger class="py-2 text-xs text-muted-foreground">Advanced Color</AccordionTrigger>
-                         <AccordionContent class="space-y-4 pt-2">
-                            <div class="space-y-2">
+                         <AccordionTrigger class="py-2.5 text-[11px] uppercase tracking-wider text-muted-foreground hover:no-underline hover:text-foreground transition-colors duration-50">Advanced Color</AccordionTrigger>
+                         <AccordionContent class="space-y-3 pt-2">
+                            <div class="space-y-1.5">
                                 <div class="flex justify-between items-center">
-                                    <Label class="text-xs">Threshold</Label>
-                                    <span class="text-[10px] font-mono">{{ magick.settings.thresholdPercentage[0] }}%</span>
+                                    <span class="text-[11px] text-muted-foreground">Threshold</span>
+                                    <span class="text-[11px] font-mono font-bold">{{ magick.settings.thresholdPercentage[0] }}%</span>
                                 </div>
                                 <Slider v-model="magick.settings.thresholdPercentage" :max="100" :min="0" :step="1" />
                             </div>
-                            <div class="space-y-2">
+                            <div class="space-y-1.5">
                                 <div class="flex justify-between items-center">
-                                    <Label class="text-xs">Sigmoidal Contrast</Label>
-                                    <span class="text-[10px] font-mono">{{ magick.settings.sigmoidalContrast[0] }}</span>
+                                    <span class="text-[11px] text-muted-foreground">Sigmoidal Contrast</span>
+                                    <span class="text-[11px] font-mono font-bold">{{ magick.settings.sigmoidalContrast[0] }}</span>
                                 </div>
                                 <Slider v-model="magick.settings.sigmoidalContrast" :max="20" :min="-20" :step="1" />
                             </div>
@@ -420,82 +481,133 @@ async function handleFileChange(e) {
             </AccordionContent>
           </AccordionItem>
 
-          <!-- Filters & Effects -->
-          <AccordionItem value="filters" class="border rounded-lg mb-2 last:mb-0 shadow-sm bg-card overflow-hidden">
-             <AccordionTrigger class="px-3 py-3 text-sm font-semibold hover:no-underline hover:bg-muted/30 transition-colors pr-2">
-                <div class="flex items-center gap-2">
-                    <span>Filters & Effects</span>
-                    <div v-if="magick.settings.effect !== 'none' || magick.settings.blur[0] > 0 || magick.settings.sharpen[0] > 0" class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+          <!-- Filters Section -->
+          <AccordionItem value="filters" class="border-b px-4">
+             <AccordionTrigger class="hover:no-underline py-3.5 group cursor-pointer">
+                <div class="flex items-center gap-2.5">
+                    <Wand2 class="w-4 h-4 text-primary" />
+                    <span class="text-xs font-bold uppercase tracking-wider">Filters</span>
+                    <div v-if="magick.settings.effect !== 'none' || magick.settings.blur[0] > 0 || magick.settings.sharpen[0] > 0" class="w-1.5 h-1.5 rounded-full bg-primary" />
                 </div>
-                <Button @click.stop="magick.resetFilters()" variant="ghost" size="icon" class="w-6 h-6 ml-auto mr-2 text-muted-foreground" title="Reset Filters">
-                    <RefreshCcw class="w-3 h-3" />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button @click.stop="magick.resetFilters()" variant="ghost" size="icon" class="h-6 w-6 ml-auto mr-2 opacity-0 group-hover:opacity-100 transition-opacity duration-50">
+                          <RefreshCcw class="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">Reset Filters</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
             </AccordionTrigger>
-            <AccordionContent class="px-3 pb-4 pt-1 space-y-4">
-                <div class="space-y-1.5">
-                    <Label class="text-xs text-muted-foreground">Effect Mode</Label>
+            <AccordionContent class="pb-4 space-y-4">
+                <div class="space-y-2">
+                    <Label class="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">Effect Preset</Label>
                     <Select v-model="magick.settings.effect">
                         <SelectTrigger class="h-9">
                         <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="grayscale">Grayscale</SelectItem>
-                        <SelectItem value="sepia">Sepia</SelectItem>
-                        <SelectItem value="charcoal">Charcoal</SelectItem>
-                        <SelectItem value="negate">Invert</SelectItem>
-                        <SelectItem value="cannyEdge">Edge Detect</SelectItem>
-                        <SelectItem value="oilpaint">Oil Paint</SelectItem>
-                        <SelectItem value="solarize">Solarize</SelectItem>
-                        <SelectItem value="bilateralBlur">Bilateral Blur</SelectItem>
+                            <SelectItem value="none">None (Original)</SelectItem>
+                            <SelectItem value="grayscale">Grayscale</SelectItem>
+                            <SelectItem value="sepia">Sepia Tone</SelectItem>
+                            <SelectItem value="charcoal">Charcoal Sketch</SelectItem>
+                            <SelectItem value="negate">Negative</SelectItem>
+                            <SelectItem value="cannyEdge">Edge Detection</SelectItem>
+                            <SelectItem value="oilpaint">Oil Paint</SelectItem>
+                            <SelectItem value="solarize">Solarize</SelectItem>
+                            <SelectItem value="bilateralBlur">Bilateral Blur</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
 
-                <!-- Conditional Effect Controls -->
-                <div v-if="magick.settings.effect !== 'none'" class="p-3 bg-muted/30 rounded-md border space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                 <!-- Effect Settings -->
+                  <div v-if="magick.settings.effect !== 'none'" class="p-3 border border-border rounded-sm bg-muted/30 space-y-3 animate-in fade-in slide-in-from-top-2 duration-50">
                      <div v-if="magick.settings.effect === 'sepia'" class="space-y-1.5">
-                        <div class="flex justify-between"><Label class="text-xs">Threshold</Label><span class="text-xs font-mono">{{ magick.settings.sepiaThreshold[0] }}</span></div>
-                        <Slider v-model="magick.settings.sepiaThreshold" />
+                        <div class="flex justify-between">
+                          <span class="text-[11px] font-medium text-muted-foreground">Threshold</span>
+                          <span class="text-[11px] font-mono font-bold">{{ magick.settings.sepiaThreshold[0] }}%</span>
+                        </div>
+                        <Slider v-model="magick.settings.sepiaThreshold" :max="100" :min="0" :step="1" />
                      </div>
+                     
                      <div v-if="magick.settings.effect === 'oilpaint'" class="space-y-1.5">
-                        <div class="flex justify-between"><Label class="text-xs">Radius</Label><span class="text-xs font-mono">{{ magick.settings.oilpaintRadius[0] }}</span></div>
-                        <Slider v-model="magick.settings.oilpaintRadius" :max="15" :step="0.5" />
+                        <div class="flex justify-between">
+                          <span class="text-[11px] font-medium text-muted-foreground">Radius</span>
+                          <span class="text-[11px] font-mono font-bold">{{ magick.settings.oilpaintRadius[0] }}</span>
+                        </div>
+                        <Slider v-model="magick.settings.oilpaintRadius" :max="15" :min="0" :step="0.5" />
                      </div>
+
                      <div v-if="magick.settings.effect === 'solarize'" class="space-y-1.5">
-                        <div class="flex justify-between"><Label class="text-xs">Factor</Label><span class="text-xs font-mono">{{ magick.settings.solarizeFactor[0] }}</span></div>
-                        <Slider v-model="magick.settings.solarizeFactor" />
+                        <div class="flex justify-between">
+                          <span class="text-[11px] font-medium text-muted-foreground">Factor</span>
+                          <span class="text-[11px] font-mono font-bold">{{ magick.settings.solarizeFactor[0] }}%</span>
+                        </div>
+                        <Slider v-model="magick.settings.solarizeFactor" :max="100" :min="0" :step="1" />
                      </div>
+
                      <div v-if="magick.settings.effect === 'cannyEdge'" class="space-y-3">
                          <div class="space-y-1.5">
-                            <div class="flex justify-between"><Label class="text-xs">Strength</Label><span class="text-xs font-mono">{{ magick.settings.cannyEdgeStrength[0] }}</span></div>
-                            <Slider v-model="magick.settings.cannyEdgeStrength" />
+                            <div class="flex justify-between">
+                              <span class="text-[11px] font-medium text-muted-foreground">Strength</span>
+                              <span class="text-[11px] font-mono font-bold">{{ magick.settings.cannyEdgeStrength[0] }}</span>
+                            </div>
+                            <Slider v-model="magick.settings.cannyEdgeStrength" :max="10" :min="0" :step="0.1" />
                          </div>
                          <div class="space-y-1.5">
-                            <div class="flex justify-between"><Label class="text-xs">Lower</Label><span class="text-xs font-mono">{{ magick.settings.cannyEdgeLower[0] }}%</span></div>
-                            <Slider v-model="magick.settings.cannyEdgeLower" />
+                            <div class="flex justify-between">
+                              <span class="text-[11px] font-medium text-muted-foreground">Lower Threshold</span>
+                              <span class="text-[11px] font-mono font-bold">{{ magick.settings.cannyEdgeLower[0] }}%</span>
+                            </div>
+                            <Slider v-model="magick.settings.cannyEdgeLower" :max="100" :min="0" :step="1" />
                          </div>
                          <div class="space-y-1.5">
-                            <div class="flex justify-between"><Label class="text-xs">Upper</Label><span class="text-xs font-mono">{{ magick.settings.cannyEdgeUpper[0] }}%</span></div>
-                            <Slider v-model="magick.settings.cannyEdgeUpper" />
+                            <div class="flex justify-between">
+                              <span class="text-[11px] font-medium text-muted-foreground">Upper Threshold</span>
+                              <span class="text-[11px] font-mono font-bold">{{ magick.settings.cannyEdgeUpper[0] }}%</span>
+                            </div>
+                            <Slider v-model="magick.settings.cannyEdgeUpper" :max="100" :min="0" :step="1" />
                          </div>
                      </div>
+
                      <div v-if="magick.settings.effect === 'bilateralBlur'" class="space-y-3">
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1"><Label class="text-[10px]">Width</Label><Slider v-model="magick.settings.bilateralWidth" :max="10" :step="1" /></div>
-                            <div class="space-y-1"><Label class="text-[10px]">Height</Label><Slider v-model="magick.settings.bilateralHeight" :max="10" :step="1" /></div>
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between">
+                              <span class="text-[11px] font-medium text-muted-foreground">Width</span>
+                              <span class="text-[11px] font-mono font-bold">{{ magick.settings.bilateralWidth[0] }}</span>
+                            </div>
+                            <Slider v-model="magick.settings.bilateralWidth" :max="20" :min="0" :step="1" />
                         </div>
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between">
+                              <span class="text-[11px] font-medium text-muted-foreground">Height</span>
+                              <span class="text-[11px] font-mono font-bold">{{ magick.settings.bilateralHeight[0] }}</span>
+                            </div>
+                            <Slider v-model="magick.settings.bilateralHeight" :max="20" :min="0" :step="1" />
+                        </div>
+                     </div>
+                     
+                     <div v-if="['grayscale', 'negate', 'charcoal'].includes(magick.settings.effect)" class="text-[11px] text-center text-muted-foreground py-1">
+                        No additional parameters for this effect
                      </div>
                 </div>
 
-                <div class="space-y-3 pt-2 border-t">
+                <!-- Blur & Sharpen -->
+                <div class="grid grid-cols-2 gap-3 pt-3 border-t border-dashed border-border/60">
                     <div class="space-y-1.5">
-                        <div class="flex justify-between"><Label class="text-xs text-muted-foreground">Blur</Label><span class="text-xs font-mono text-primary">{{ magick.settings.blur[0] }}</span></div>
-                        <Slider v-model="magick.settings.blur" :max="20" :step="0.5" />
+                        <div class="flex justify-between">
+                          <Label class="text-[11px] uppercase font-semibold text-muted-foreground tracking-wide">Blur</Label>
+                          <span class="text-[11px] font-mono font-bold">{{ magick.settings.blur[0] }}</span>
+                        </div>
+                        <Slider v-model="magick.settings.blur" :max="20" :min="0" :step="0.5" />
                     </div>
                     <div class="space-y-1.5">
-                         <div class="flex justify-between"><Label class="text-xs text-muted-foreground">Sharpen</Label><span class="text-xs font-mono text-primary">{{ magick.settings.sharpen[0] }}</span></div>
-                         <Slider v-model="magick.settings.sharpen" />
+                         <div class="flex justify-between">
+                           <Label class="text-[11px] uppercase font-semibold text-muted-foreground tracking-wide">Sharpen</Label>
+                           <span class="text-[11px] font-mono font-bold">{{ magick.settings.sharpen[0] }}</span>
+                         </div>
+                         <Slider v-model="magick.settings.sharpen" :max="10" :min="0" :step="0.5" />
                     </div>
                 </div>
             </AccordionContent>
@@ -504,41 +616,94 @@ async function handleFileChange(e) {
       </div>
 
       <!-- Footer Actions -->
-      <div class="sidebar-footer p-4 border-t bg-muted/10 space-y-3 shrink-0">
+      <div class="p-4 border-t space-y-3">
         <div class="flex gap-2">
+            <Button 
+                @click="magick.processImage(debugMode, () => { emit('file-changed'); })" 
+                :disabled="!magick.wasmLoaded.value || !magick.originalImageUrl.value" 
+                variant="secondary"
+                class="flex-1 font-bold uppercase tracking-wider h-11 shadow-md hover:shadow-lg transition-shadow duration-50"
+            >
+                Process Image
+            </Button>
             <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger as-child>
-                <Button @click="magick.processImage(debugMode, () => emit('file-changed'))" :disabled="!magick.wasmLoaded.value || !magick.originalImageUrl.value" class="flex-1 font-semibold shadow-sm">Process</Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                <p>Process Image (Ctrl+Enter)</p>
-                </TooltipContent>
-            </Tooltip>
-            </TooltipProvider>
-
-            <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger as-child>
-                <Button @click="magick.downloadImage()" :disabled="!magick.processedImageUrl.value" variant="outline" size="icon" class="w-10 shrink-0">
-                    <Download class="w-4 h-4" />
-                </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                <p>Download (Ctrl+S)</p>
-                </TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger as-child>
+                        <Button 
+                          @click="magick.downloadImage()" 
+                          :disabled="!magick.processedImageUrl.value" 
+                          variant="outline" 
+                          class="h-11 w-11 p-0 shadow-sm hover:shadow-md transition-shadow duration-50"
+                        >
+                            <Download class="w-4 h-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Download Result</TooltipContent>
+                </Tooltip>
             </TooltipProvider>
         </div>
-        <div id="stats-bar" class="text-xs text-muted-foreground text-center font-mono whitespace-pre-line leading-tight">
-           {{ magick.statsMessage.value }}
+        <div class="h-5 flex items-center justify-center">
+            <span v-if="magick.statsMessage.value" class="text-[11px] font-bold text-primary tracking-widest font-mono">
+                {{ magick.statsMessage.value }}
+            </span>
+            <span v-else-if="!magick.wasmLoaded.value" class="text-[11px] text-amber-500 font-bold">
+                Initializing WASM Engine...
+            </span>
+            <span v-else class="text-[11px] text-muted-foreground/50 font-semibold tracking-wide">
+                Ready to Process
+            </span>
         </div>
       </div>
     </aside>
 </template>
 
 <style scoped>
-.accordion-content {
-    overflow: hidden;
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 10px;
+  transition: background 0.1s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* Remove number input spinners */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+input[type=range] {
+  cursor: pointer;
+}
+
+/* Ensure smooth slider transitions */
+[role="slider"] {
+  transition: none !important;
+}
+
+/* Prevent lag on slider thumb during drag */
+.slider-thumb {
+  will-change: transform;
+  transition: box-shadow 0.1s ease;
 }
 </style>

@@ -38,14 +38,14 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
   <SliderRoot
     :class="
       cn(
-        'relative flex w-full touch-none select-none items-center data-[orientation=vertical]:flex-col data-[orientation=vertical]:w-1.5 data-[orientation=vertical]:h-full cursor-pointer',
+        'relative flex w-full py-[0.05rem] touch-none select-none items-center data-[orientation=vertical]:flex-col data-[orientation=vertical]:w-1 data-[orientation=vertical]:h-full',
         props.class,
       )
     "
     v-bind="forwarded"
   >
     <SliderTrack
-      class="relative h-1.5 w-full data-[orientation=vertical]:w-1.5 grow overflow-hidden rounded-full bg-primary/20"
+      class="relative h-[0.35rem] w-full data-[orientation=vertical]:w-1 grow overflow-hidden rounded-full bg-muted cursor-pointer"
     >
       <SliderRange
         class="absolute h-full data-[orientation=vertical]:w-full bg-primary"
@@ -54,7 +54,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
     <SliderThumb
       v-for="(_, key) in modelValue"
       :key="key"
-      class="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer"
+      class="block h-3.5 w-3.5 rounded-full border border-primary bg-primary shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 hover:scale-110 cursor-pointer transition-transform duration-50"
     />
   </SliderRoot>
 </template>

@@ -27,6 +27,7 @@ const props = defineProps({
   collisionBoundary: { type: null, required: false },
   collisionPadding: { type: [Number, Object], required: false },
   arrowPadding: { type: Number, required: false },
+  hideShiftedArrow: { type: Boolean, required: false },
   sticky: { type: String, required: false },
   hideWhenDetached: { type: Boolean, required: false },
   positionStrategy: { type: String, required: false },
@@ -36,6 +37,7 @@ const props = defineProps({
   reference: { type: null, required: false },
   asChild: { type: Boolean, required: false },
   as: { type: null, required: false },
+  disableOutsidePointerEvents: { type: Boolean, required: false },
   class: { type: null, required: false },
 });
 const emits = defineEmits([
@@ -55,7 +57,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       v-bind="{ ...forwarded, ...$attrs }"
       :class="
         cn(
-          'relative z-50 max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+          'relative z-50 max-h-96 min-w-32 overflow-hidden rounded-xs border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 duration-50',
           position === 'popper' &&
             'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
           props.class,
