@@ -155,7 +155,7 @@ defineExpose({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Reset View (0)</p>
+                <p>Reset View (Ctrl+0)</p>
               </TooltipContent>
             </Tooltip>
           </div>

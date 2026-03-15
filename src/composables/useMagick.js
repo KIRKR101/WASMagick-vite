@@ -109,8 +109,10 @@ export function useMagick() {
             await initializeImageMagick(wasmBytes);
             wasmLoaded.value = true;
 
+            console.log('ImageMagick WASM loaded, Version:', Magick.imageMagickVersion);
+            
             if (debugMode) {
-                console.log('ImageMagick Version:', Magick.imageMagickVersion);
+                console.log('Debug mode enabled');
             }
         } catch (e) {
             statsMessage.value = "Error Loading WASM";
